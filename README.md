@@ -33,12 +33,14 @@ npm run dev
 
 ### Environment Variables
 
-See `.env.example` (to be added in PR-01) for API keys and service configuration. Expected variables include:
+See `meno-web/.env.example` for API keys and service configuration. Key variables include:
 
 - `OPENAI_API_KEY`
 - `MATHPIX_APP_ID` / `MATHPIX_APP_KEY`
-- `SUPABASE_URL` / `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 - `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
 ## Roadmap
 
@@ -63,12 +65,11 @@ For the complete breakdown, see `docs/Meno_Roadmap_PRs.md`.
 
 ```
 meno/
-├─ app/                # Next.js App Router pages and layouts
-├─ components/         # UI, chat, whiteboard, voice, and problem modules
-├─ lib/                # Dialogue engine, stores, math, realtime, analytics
-├─ pages/api/          # Serverless endpoints (OCR, HSP, dialogue, validation)
-├─ services/           # Long-lived services (e.g., SymPy microservice)
-├─ public/             # Static assets and example problems
+├─ meno-web/           # Next.js app (App Router) for tutor experience
+│  ├─ src/app/         # Routes, layout, UI showcase
+│  ├─ src/components/  # Design system, system helpers
+│  ├─ src/lib/         # Zustand stores & forthcoming services
+│  └─ src/env.ts       # Environment schema (zod)
 └─ docs/               # Product docs and demos
 ```
 

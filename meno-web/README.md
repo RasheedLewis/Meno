@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Meno Web
+
+The web experience for **Meno**, a Socratic math tutor. This Next.js app delivers the instructor console, chat pane, whiteboard, and companion interactions described in the product roadmap.
+
+## Stack
+
+- Next.js (App Router, TypeScript)
+- Tailwind CSS (via `tailwindcss` 4 preview)
+- Zustand for UI/session state
+- Zod-based environment validation (`src/env.ts`)
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The dev server runs at [http://localhost:3000](http://localhost:3000). The `/ui` route previews all core UI primitives and the Zustand stores.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Environment variables are validated at runtime by `src/env.ts`. Missing or malformed values will throw during boot.
 
-## Learn More
+| Variable | Scope | Description |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | Server | LLM orchestration (Hidden Solution Plan + Dialogue) |
+| `MATHPIX_APP_ID` / `MATHPIX_APP_KEY` | Server | OCR provider credentials for problem ingestion |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server | Server-side Supabase operations (presence, transcripts) |
+| `NEXT_PUBLIC_APP_URL` | Client | Base URL used for links and share targets |
+| `NEXT_PUBLIC_SUPABASE_URL` | Client | Supabase project URL for realtime/presence |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client | Public anon key for Supabase client |
 
-To learn more about Next.js, take a look at the following resources:
+> Copy `.env.example` → `.env.local` and update values per environment. Optional variables can remain blank during early development; validation only enforces format when provided.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the Next.js dev server |
+| `npm run build` | Build for production |
+| `npm run start` | Run the production build |
+| `npm run lint` | ESLint over the codebase |
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/
+├─ app/          # App Router routes (layout, pages, UI showcase, etc.)
+├─ components/   # Reusable UI primitives and system helpers
+├─ lib/
+│  ├─ store/     # Zustand stores for UI + session state
+│  └─ ...        # Upcoming dialogue + realtime libraries
+└─ env.ts        # Runtime environment validation
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Next Steps
+
+- Flesh out the chat pane and problem ingestion workflows (PR-02 / PR-03).
+- Wire OCR, HSP, and dialogue services to the validated env keys.
+- Expand tests and add Playwright flows once UI primitives stabilize.
