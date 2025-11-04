@@ -1,26 +1,76 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  color-scheme: light;
+  --surface: #faf7f2;
+  --paper: #ffffff;
+  --ink: #2a211c;
+  --muted: #8f8375;
+  --accent: #8b5e3c;
+  --border: #e6dccd;
+  --shadow-sm: 0 12px 40px rgba(42, 33, 28, 0.08);
+  --font-serif: var(--font-garamond);
+  --font-sans: var(--font-inter);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not(.light) {
+    color-scheme: dark;
+    --surface: #1b1b1a;
+    --paper: #242422;
+    --ink: #e9e5dc;
+    --muted: #afa89e;
+    --accent: #c4a46e;
+    --border: #3c3b38;
+    --shadow-sm: 0 12px 40px rgba(8, 7, 6, 0.55);
+    --font-serif: var(--font-garamond);
+    --font-sans: var(--font-inter);
   }
 }
 
+.dark {
+  color-scheme: dark;
+  --surface: #1b1b1a;
+  --paper: #242422;
+  --ink: #e9e5dc;
+  --muted: #afa89e;
+  --accent: #c4a46e;
+  --border: #3c3b38;
+  --shadow-sm: 0 12px 40px rgba(8, 7, 6, 0.55);
+  --font-serif: var(--font-garamond);
+  --font-sans: var(--font-inter);
+}
+
+.light {
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --shadow-sm: var(--shadow-sm);
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  letter-spacing: 0.01em;
+  transition: background 200ms ease, color 200ms ease;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
 }
