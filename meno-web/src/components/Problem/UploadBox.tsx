@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import {
@@ -17,7 +18,7 @@ import { RichMathText } from "@/components/Math/RichMathText";
 import { KaTeXBlock } from "@/components/Math/KaTeXBlock";
 import { showToast } from "@/components/ui/Toast";
 import { normalizeId } from "@/lib/utils/id";
-import type { HspPlan } from "@/lib/hsp/schema";
+import type { HspPlan, OcrUploadRecord } from "@/lib/hsp/schema";
 
 type UploadStatus = "queued" | "processing" | "succeeded" | "failed";
 
@@ -32,6 +33,7 @@ interface UploadItem {
     mathSegments?: Array<{ id: string; content: string; display?: boolean }>;
   };
   error?: string;
+  imageDataUrl?: string;
 }
 
 interface UploadBoxProps {
@@ -54,6 +56,14 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const sessionId = useSessionStore((state) => state.sessionId);
   const setHspPlan = useSessionStore((state) => state.setHspPlan);
+  const hspPlan = useSessionStore((state) => state.hspPlan);
+  const [history, setHistory] = useState<OcrUploadRecord[]>([]);
+
+  useEffect(() => {
+    if (hspPlan?.meta?.uploads) {
+      setHistory(hspPlan.meta.uploads);
+    }
+  }, [hspPlan]);
 
   const processingUpload = uploads.find((upload) => upload.status === "processing");
   const queuedUpload = useMemo(
@@ -65,6 +75,7 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
     async (
       file: File,
       result: NonNullable<UploadItem["result"]>,
+      imageBase64: string,
       currentSessionId: string | null,
     ) => {
       if (!currentSessionId) {
@@ -82,6 +93,14 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
             problemId,
             canonicalText: result.canonicalText,
             goal: result.plainText,
+            upload: {
+              fileName: file.name,
+              canonicalText: result.canonicalText,
+              plainText: result.plainText,
+              latex: result.latex,
+              imageBase64,
+              uploadedAt: new Date().toISOString(),
+            },
           }),
         });
 
@@ -138,14 +157,14 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
         setUploads((prev) =>
           prev.map((item) =>
             item.id === upload.id
-              ? { ...item, status: "succeeded", result: data.data }
+              ? { ...item, status: "succeeded", result: data.data, imageDataUrl: base64 }
               : item,
           ),
         );
 
         onResult?.(data.data, upload.file);
 
-        await maybeGenerateHspPlan(upload.file, data.data, sessionId ?? null);
+        await maybeGenerateHspPlan(upload.file, data.data, base64, sessionId ?? null);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unexpected error";
         setUploads((prev) =>
@@ -282,6 +301,15 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
                       text={upload.result.canonicalText}
                       className="font-serif text-sm leading-relaxed text-[var(--ink)] whitespace-pre-wrap"
                     />
+                    {upload.imageDataUrl ? (
+                      <div className="mt-2">
+                        <img
+                          src={upload.imageDataUrl}
+                          alt={upload.file.name}
+                          className="max-h-48 w-auto rounded-xl border border-[var(--border)]"
+                        />
+                      </div>
+                    ) : null}
                     {upload.result.mathSegments && upload.result.mathSegments.length ? (
                       <div className="space-y-2 text-xs text-[var(--muted)]">
                         <span className="font-sans uppercase tracking-[0.3em] text-[var(--muted)]">
@@ -303,6 +331,42 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
                     ) : null}
                   </div>
                 ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {history.length > 0 ? (
+        <div className="space-y-3">
+          <div className="font-sans text-xs uppercase tracking-[0.3em] text-[var(--muted)]">
+            Previous uploads
+          </div>
+          <ul className="space-y-3">
+            {history.map((record) => (
+              <li
+                key={record.id}
+                className="rounded-2xl border border-[var(--border)] bg-[var(--paper)]/80 px-4 py-3"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-sans text-sm text-[var(--ink)]">{record.fileName}</span>
+                  <span className="font-sans text-xs text-[var(--muted)]">
+                    {new Date(record.uploadedAt).toLocaleString()}
+                  </span>
+                </div>
+                <div className="mt-2 space-y-2">
+                  <RichMathText
+                    text={record.canonicalText}
+                    className="font-serif text-sm leading-relaxed text-[var(--ink)] whitespace-pre-wrap"
+                  />
+                  {record.imageBase64 ? (
+                    <img
+                      src={record.imageBase64}
+                      alt={record.fileName}
+                      className="max-h-48 w-auto rounded-xl border border-[var(--border)]"
+                    />
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>

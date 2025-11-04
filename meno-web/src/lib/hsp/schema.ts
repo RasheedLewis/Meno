@@ -1,5 +1,15 @@
 export type TaxonomyKey = "definitional" | "analytical" | "proportional" | "spectral" | "evaluative";
 
+export interface OcrUploadRecord {
+  id: string;
+  fileName: string;
+  canonicalText: string;
+  plainText: string;
+  latex?: string;
+  imageBase64?: string;
+  uploadedAt: string;
+}
+
 export interface HspStep {
   id: string;
   title: string;
@@ -20,7 +30,10 @@ export interface HspPlan {
   createdAt: string;
   updatedAt?: string;
   steps: HspStep[];
-  meta?: Record<string, unknown>;
+  meta?: Record<string, unknown> & {
+    canonicalText?: string;
+    uploads?: OcrUploadRecord[];
+  };
 }
 
 export interface GenerateHspInput {

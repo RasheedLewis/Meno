@@ -65,7 +65,7 @@ export async function generateHiddenSolutionPlan(input: GenerateHspInput): Promi
     createdAt,
     steps,
     meta: {
-      ...json.meta,
+      ...(json.meta ?? {}),
       canonicalText: input.canonicalText,
     },
   } satisfies HspPlan;

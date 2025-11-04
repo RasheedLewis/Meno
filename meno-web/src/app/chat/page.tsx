@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 import { ChatPane } from "@/components/ChatPane/ChatPane";
 import { ProblemHeader } from "@/components/Problem/ProblemHeader";
@@ -11,64 +11,91 @@ import type { HspPlan } from "@/lib/hsp/schema";
 
 export default function ChatDemoPage() {
   const hspPlan = useSessionStore((state) => state.hspPlan);
+  const hspPlanId = useSessionStore((state) => state.hspPlanId);
+  const setHspPlan = useSessionStore((state) => state.setHspPlan);
+
+  useEffect(() => {
+    if (!hspPlanId || hspPlan) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`/api/hsp?id=${hspPlanId}`);
+        if (!response.ok) {
+          console.warn("Failed to hydrate plan", await response.text());
+          return;
+        }
+        const payload = await response.json();
+        if (!cancelled && payload?.ok) {
+          setHspPlan(payload.data);
+        }
+      } catch (error) {
+        console.error("Plan hydration failed", error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hspPlanId, hspPlan, setHspPlan]);
 
   const demoProblem: ProblemMeta = useMemo(
     () => ({
-    id: "pythagorean-recollection",
-    title: "Doubling the Square",
-    description:
-      "A young learner is asked to find the side of a square whose area is double that of a given square.",
-    context: {
-      domain: "math",
-      difficulty: "intermediate",
-      source: "Meno 82b-85b",
-    },
-    knowns: [
-      {
-        label: "Given",
-        value: "A unit square with side length $1$ has area $1$.",
+      id: "pythagorean-recollection",
+      title: "Doubling the Square",
+      description:
+        "A young learner is asked to find the side of a square whose area is double that of a given square.",
+      context: {
+        domain: "math",
+        difficulty: "intermediate",
+        source: "Meno 82b-85b",
       },
-      {
-        label: "Construction",
-        value: "The diagonal of the unit square has length $\sqrt{2}$.",
+      knowns: [
+        {
+          label: "Given",
+          value: "A unit square with side length $1$ has area $1$.",
+        },
+        {
+          label: "Construction",
+          value: "The diagonal of the unit square has length $\\sqrt{2}$.",
+        },
+      ],
+      unknowns: [
+        {
+          label: "To Find",
+          value: "The side length $s$ such that $s^2 = 2$.",
+        },
+        {
+          label: "Verification",
+          value: "Show that constructing a square on the diagonal doubles the area.",
+        },
+      ],
+      goal: "Guide the learner to see that the diagonal furnishes the side of the double-area square.",
+      hints: [
+        "Compare the areas formed by arranging the original squares around the diagonal.",
+        "Ask what happens to area when each side is multiplied by $\\sqrt{2}$.",
+      ],
+      keywords: ["recollection", "geometry", "square"],
+      relatedConcepts: ["Proportion", "Diagonal", "Area"],
+      evaluation: {
+        rubric: "Learner articulates why the diagonal yields the double-area square without memorized formulas.",
+        metrics: {
+          reasoning: 4,
+          precision: 3,
+        },
       },
-    ],
-    unknowns: [
-      {
-        label: "To Find",
-        value: "The side length $s$ such that $s^2 = 2$.",
+      metadata: {
+        author: "Socratic Demo",
+        createdAt: "2024-07-12T00:00:00Z",
       },
-      {
-        label: "Verification",
-        value: "Show that constructing a square on the diagonal doubles the area.",
-      },
-    ],
-    goal: "Guide the learner to see that the diagonal furnishes the side of the double-area square.",
-    hints: [
-      "Compare the areas formed by arranging the original squares around the diagonal.",
-      "Ask what happens to area when each side is multiplied by $\sqrt{2}$.",
-    ],
-    keywords: ["recollection", "geometry", "square"],
-    relatedConcepts: ["Proportion", "Diagonal", "Area"],
-    evaluation: {
-      rubric: "Learner articulates why the diagonal yields the double-area square without memorized formulas.",
-      metrics: {
-        reasoning: 4,
-        precision: 3,
-      },
-    },
-    metadata: {
-      author: "Socratic Demo",
-      createdAt: "2024-07-12T00:00:00Z",
-    },
     }),
     [],
   );
 
   const activeProblem = useMemo<ProblemMeta>(() => {
-    if (!hspPlan) return demoProblem;
+    if (!hspPlan) {
+      return demoProblem;
+    }
     return planToProblemMeta(hspPlan, demoProblem);
-  }, [demoProblem, hspPlan]);
+  }, [hspPlan, demoProblem]);
 
   return (
     <div className="flex flex-col items-center gap-8">
