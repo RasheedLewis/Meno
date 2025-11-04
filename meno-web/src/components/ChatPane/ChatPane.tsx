@@ -3,23 +3,42 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { showToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
-import { useChatStore, createChatMessage } from "@/lib/store/chat";
+import { createChatMessage, useChatStore } from "@/lib/store/chat";
+import { useSessionStore } from "@/lib/store/session";
+import type { DialogueContextTurn, StudentTurnFeedback } from "@/lib/dialogue/types";
 
 import { MessageBubble } from "./Message";
 
-const demoResponses = [
-  "Interesting. What’s the first move that would undo what’s happening to x?",
-  "Let’s peel it back carefully. What operation is paired with the +5?",
-  "Try narrating the inverse steps aloud—what do we do before dividing?",
-  "Suppose we had the answer already. How could we check it quickly?",
-];
+const buildStatus = (isStreaming: boolean, isInitializing: boolean) => {
+  if (isInitializing) {
+    return "Initializing Socratic dialogue…";
+  }
+  return isStreaming ? "Meno is thinking…" : "Type Shift+Enter for a new line";
+};
 
-const getDemoResponse = () =>
-  demoResponses[Math.floor(Math.random() * demoResponses.length)] ?? demoResponses[0];
+interface DialogueResponse {
+  step: { title: string; prompt: string } | null;
+  promptTemplate: string | null;
+  stepIndex: number;
+  totalSteps: number;
+  completedStepIds: string[];
+  done: boolean;
+  goal: string;
+  summary?: string;
+  hintLevel: number;
+  hint: string | null;
+  attemptCount: number;
+  instructions: string;
+  recap?: {
+    summary: string;
+    highlights: string[];
+    nextFocus?: string;
+  };
+}
 
-const buildStatus = (isStreaming: boolean) =>
-  isStreaming ? "Meno is thinking…" : "Type Shift+Enter for a new line";
+const DEFAULT_NOTE = "Socratic Session";
 
 export function ChatPane({ className }: { className?: string }) {
   const messages = useChatStore((state) => state.messages);
@@ -29,11 +48,25 @@ export function ChatPane({ className }: { className?: string }) {
   const clearMessages = useChatStore((state) => state.clearMessages);
   const isStreaming = useChatStore((state) => state.isStreaming);
 
-  const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const streamer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionId = useSessionStore((state) => state.sessionId);
+  const hspPlan = useSessionStore((state) => state.hspPlan);
+  const hspPlanId = useSessionStore((state) => state.hspPlanId);
+  const planId = hspPlan?.id ?? hspPlanId;
 
-  const status = useMemo(() => buildStatus(isStreaming), [isStreaming]);
+  const [input, setInput] = useState("");
+  const [instructions, setInstructions] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
+  const [stepTitle, setStepTitle] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const lastPlanRef = useRef<string | null>(null);
+
+  const status = useMemo(
+    () => buildStatus(isStreaming, isInitializing),
+    [isStreaming, isInitializing],
+  );
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -41,32 +74,62 @@ export function ChatPane({ className }: { className?: string }) {
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => () => {
-    if (streamer.current) {
-      clearTimeout(streamer.current);
-    }
-  }, []);
-
-  const scheduleDemoResponse = () => {
-    if (streamer.current) {
-      clearTimeout(streamer.current);
+  useEffect(() => {
+    if (!sessionId || !planId) {
+      return;
     }
 
-    streamer.current = setTimeout(() => {
-      const menoMessage = createChatMessage("meno", getDemoResponse(), {
-        source: "chat",
-        channel: "public",
-        tags: ["demo"],
+    if (lastPlanRef.current === planId) {
+      return;
+    }
+
+    lastPlanRef.current = planId;
+    resetDialogueState();
+    initializeDialogue(sessionId, planId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, planId]);
+
+  const resetDialogueState = () => {
+    clearMessages();
+    setInstructions(null);
+    setHint(null);
+    setStepTitle(null);
+    setDone(false);
+  };
+
+  const initializeDialogue = async (session: string, plan: string) => {
+    setIsInitializing(true);
+    startStreaming();
+    try {
+      const response = await fetch("/api/meno", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session, planId: plan, transcript: buildTranscript() }),
       });
-      addMessage(menoMessage);
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(`Failed to start dialogue (${response.status}): ${message || "Unknown error"}`);
+      }
+
+      const payload = await response.json();
+      if (payload?.ok) {
+        handleDialogueResponse(payload.data, { replace: true });
+      } else {
+        showToast({ variant: "error", title: payload?.error ?? "Failed to start dialogue" });
+      }
+    } catch (error) {
+      console.error("Dialogue initialization failed", error);
+      showToast({ variant: "error", title: "Failed to start dialogue" });
+    } finally {
+      setIsInitializing(false);
       stopStreaming();
-      streamer.current = null;
-    }, 900 + Math.random() * 1200);
+    }
   };
 
   const handleSend = () => {
     const trimmed = input.trim();
-    if (!trimmed || isStreaming) {
+    if (!trimmed || isStreaming || isInitializing || !sessionId || !planId) {
       return;
     }
 
@@ -78,14 +141,10 @@ export function ChatPane({ className }: { className?: string }) {
     addMessage(studentMessage);
     setInput("");
     startStreaming();
-    scheduleDemoResponse();
+    sendTurn(trimmed, sessionId, planId);
   };
 
   const handleStop = () => {
-    if (streamer.current) {
-      clearTimeout(streamer.current);
-      streamer.current = null;
-    }
     stopStreaming();
   };
 
@@ -98,7 +157,161 @@ export function ChatPane({ className }: { className?: string }) {
 
   const handleClear = () => {
     handleStop();
-    clearMessages();
+    resetDialogueState();
+  };
+
+  const handleAdvanceStep = async () => {
+    if (!sessionId || !planId || isStreaming || isInitializing) return;
+    startStreaming();
+    try {
+      const response = await fetch("/api/meno", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, planId, advance: true, transcript: buildTranscript() }),
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(`Failed to advance step (${response.status}): ${message || "Unknown error"}`);
+      }
+
+      const payload = await response.json();
+      if (payload?.ok) {
+        handleDialogueResponse(payload.data, { replace: false });
+      } else {
+        showToast({ variant: "error", title: payload?.error ?? "Failed to advance step" });
+      }
+    } catch (error) {
+      console.error("Advance step failed", error);
+      showToast({ variant: "error", title: "Failed to advance step" });
+    } finally {
+      stopStreaming();
+    }
+  };
+
+  const sendTurn = async (content: string, session: string, plan: string) => {
+    const feedback: StudentTurnFeedback = {
+      outcome: determineOutcome(content),
+      content,
+    };
+
+    try {
+      const response = await fetch("/api/meno", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session, planId: plan, studentTurn: feedback, transcript: buildTranscript() }),
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(`Dialogue turn failed (${response.status}): ${message || "Unknown error"}`);
+      }
+
+      const payload = await response.json();
+      if (payload?.ok) {
+        handleDialogueResponse(payload.data);
+      } else {
+        showToast({ variant: "error", title: payload?.error ?? "Dialogue turn failed" });
+      }
+    } catch (error) {
+      console.error("Dialogue turn failed", error);
+      showToast({ variant: "error", title: "Dialogue turn failed" });
+    } finally {
+      stopStreaming();
+    }
+  };
+
+  const handleDialogueResponse = (data: DialogueResponse, options?: { replace?: boolean }) => {
+    setInstructions(data.instructions ?? null);
+    setHint(data.hint ?? null);
+    setDone(data.done);
+
+    if (data.step?.title) {
+      setStepTitle(data.step.title);
+    }
+
+    if (data.done && data.recap) {
+      const recapMessage = createChatMessage(
+        "meno",
+        buildRecapMessage(data.recap),
+        {
+          source: "system",
+          channel: "public",
+          tags: ["recap"],
+        },
+      );
+      if (options?.replace) {
+        clearMessages();
+      }
+      addMessage(recapMessage);
+      return;
+    }
+
+    if (!data.promptTemplate || !data.step) {
+      return;
+    }
+
+    const menoMessage = createChatMessage(
+      "meno",
+      buildMenoPrompt(data.promptTemplate),
+      {
+        source: "chat",
+        channel: "public",
+        tags: ["prompt"],
+      },
+    );
+
+    if (options?.replace) {
+      clearMessages();
+    }
+    addMessage(menoMessage);
+  };
+
+  const determineOutcome = (content: string): StudentTurnFeedback["outcome"] => {
+    if (/\b(done|next|complete|proceed)\b/i.test(content)) {
+      return "productive";
+    }
+    if (/\b(stuck|confused|don't know|not sure|lost)\b/i.test(content)) {
+      return "unproductive";
+    }
+    return "inconclusive";
+  };
+
+  const buildMenoPrompt = (template: string) => template;
+
+  const buildRecapMessage = (recap: NonNullable<DialogueResponse["recap"]>) => {
+    const highlights = recap.highlights?.length
+      ? `Highlights:\n• ${recap.highlights.join("\n• ")}`
+      : null;
+    return [
+      "Recap",
+      recap.summary,
+      highlights,
+      recap.nextFocus ? `Next focus: ${recap.nextFocus}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  };
+
+  const buildTranscript = (): DialogueContextTurn[] =>
+    useChatStore
+      .getState()
+      .messages.map((message) => ({
+        role: message.role === "meno" || message.role === "system" ? message.role : "student",
+        content: message.content,
+      }));
+
+  const renderHeaderNote = () => {
+    if (!planId) {
+      return "Upload a problem to begin";
+    }
+    if (done) {
+      return "Plan complete";
+    }
+    if (stepTitle) {
+      return stepTitle;
+    }
+    return DEFAULT_NOTE;
   };
 
   return (
@@ -112,10 +325,18 @@ export function ChatPane({ className }: { className?: string }) {
         <div className="flex flex-col">
           <h2 className="font-serif text-2xl text-[var(--ink)]">Dialogue</h2>
           <span className="font-sans text-xs uppercase tracking-[0.3em] text-[var(--muted)]">
-            Socratic Session
+            {renderHeaderNote()}
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAdvanceStep}
+            disabled={!planId || isStreaming || isInitializing || done}
+          >
+            Next Step
+          </Button>
           <Button variant="ghost" size="sm" onClick={handleClear}>
             Clear
           </Button>
@@ -126,13 +347,27 @@ export function ChatPane({ className }: { className?: string }) {
         {messages.length === 0 ? (
           <div className="grid h-full place-items-center text-center font-sans text-sm text-[var(--muted)]">
             <p>
-              No messages yet. Share a thought, a question, or a stuck point to begin the dialogue.
+              {planId
+                ? "No messages yet. Share a thought to begin the dialogue."
+                : "Upload a problem to generate a conversation."}
             </p>
           </div>
         ) : (
           messages.map((message) => <MessageBubble key={message.id} message={message} />)
         )}
       </div>
+
+      {instructions ? (
+        <div className="border-t border-[var(--border)] bg-[var(--card)]/60 px-6 py-3 font-sans text-xs text-[var(--muted)]">
+          {instructions}
+        </div>
+      ) : null}
+
+      {hint ? (
+        <div className="border-t border-[var(--border)] bg-[var(--card)]/60 px-6 py-3 font-sans text-xs text-[var(--accent)]">
+          Hint: {hint}
+        </div>
+      ) : null}
 
       <footer className="border-t border-[var(--border)] bg-[var(--card)]/80 px-6 py-4">
         <div className="flex flex-col gap-3">
@@ -143,6 +378,7 @@ export function ChatPane({ className }: { className?: string }) {
             rows={3}
             placeholder="Type your reasoning or question..."
             className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--paper)]/90 px-4 py-3 font-sans text-sm text-[var(--ink)] shadow-inner focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 focus:ring-offset-[var(--card)]"
+            disabled={!planId || isStreaming || isInitializing || done}
           />
           <div className="flex flex-wrap items-center justify-between gap-3 font-sans text-xs text-[var(--muted)]">
             <span>{status}</span>
@@ -154,7 +390,7 @@ export function ChatPane({ className }: { className?: string }) {
                 variant="primary"
                 size="md"
                 onClick={handleSend}
-                disabled={!input.trim() || isStreaming}
+                disabled={!input.trim() || isStreaming || isInitializing || !planId || done}
               >
                 Send
               </Button>

@@ -1,5 +1,5 @@
 import { env } from "@/env";
-import type { DialogueRecap } from "@/lib/dialogue/types";
+import type { DialogueContextTurn, DialogueRecap } from "@/lib/dialogue/types";
 
 const MODEL = "gpt-4.1-mini";
 
@@ -11,10 +11,29 @@ The recap must:
 - Suggest one next focus area or question.
 - Maintain a confident, encouraging tone.`;
 
+const PROMPT_SYSTEM_INSTRUCTIONS = `You are Meno, a Socratic math tutor guiding learners through mathematics.
+Craft the next short question to ask the student. Requirements:
+- At most 2 sentences.
+- End with a focused question mark.
+- Build on the student's latest response and the step prompt template.
+- If a hint is provided, weave it naturally.
+- Maintain an encouraging, curious tone.`;
+
 export interface RecapContext {
   goal: string;
   summary?: string;
   steps: Array<{ title: string; prompt: string; hintLevel?: number }>;
+  transcript?: DialogueContextTurn[];
+}
+
+export interface NextPromptContext {
+  stepTitle: string;
+  stepPrompt: string;
+  taxonomy?: string;
+  directive?: string | null;
+  hint?: string | null;
+  transcript: DialogueContextTurn[];
+  goal: string;
 }
 
 export async function generateRecap(context: RecapContext): Promise<DialogueRecap> {
@@ -73,6 +92,11 @@ ${context.steps
   .map((step, index) => `Step ${index + 1}: ${step.title}\nPrompt: ${step.prompt}\nHints Used: ${step.hintLevel ?? 0}`)
   .join("\n\n")}
 
+Dialogue Transcript:
+${(context.transcript ?? [])
+  .map((turn) => `${turn.role.toUpperCase()}: ${turn.content}`)
+  .join("\n")}
+
 Return a JSON object with fields {summary: string, highlights: string[], nextFocus?: string}.`;
 
 const extractJson = (payload: OpenAIResponse) => {
@@ -96,4 +120,65 @@ interface OpenAIResponse {
     content?: Array<{ text?: string }>;
   }>;
 }
+
+export const generateNextPrompt = async (context: NextPromptContext): Promise<string> => {
+  if (!env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is required to generate prompts");
+  }
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      input: [
+        {
+          role: "system",
+          content: [{ type: "input_text", text: PROMPT_SYSTEM_INSTRUCTIONS }],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: buildPromptRequest(context),
+            },
+          ],
+        },
+      ],
+      max_output_tokens: 300,
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Failed to generate prompt: ${response.status} ${message}`);
+  }
+
+  const payload = (await response.json()) as OpenAIResponse;
+  const candidates = payload.output_text ?? payload.output?.flatMap((item) =>
+    item.content?.map((entry) => entry.text ?? "") ?? [],
+  ) ?? [];
+
+  const text = Array.isArray(candidates) ? candidates.join(" ").trim() : String(candidates).trim();
+  if (!text) {
+    throw new Error("Prompt generation returned empty response");
+  }
+  return text;
+};
+
+const buildPromptRequest = (context: NextPromptContext) => `Goal: ${context.goal}
+Current Step Title: ${context.stepTitle}
+Step Prompt Template: ${context.stepPrompt}
+Taxonomy: ${context.taxonomy ?? "(not provided)"}
+Directive: ${context.directive ?? "(none)"}
+Hint: ${context.hint ?? "(none)"}
+
+Dialogue Transcript:
+${context.transcript.map((turn) => `${turn.role.toUpperCase()}: ${turn.content}`).join("\n")}
+
+Return only the question text.`;
 

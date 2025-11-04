@@ -11,3 +11,16 @@ export interface DialogueRecap {
   nextFocus?: string;
 }
 
+export interface DialogueContextTurn {
+  role: "student" | "meno" | "system";
+  content: string;
+}
+
+export interface DialogueTurnRequest {
+  sessionId: string;
+  planId: string;
+  advance?: boolean;
+  studentTurn?: StudentTurnFeedback;
+  transcript?: DialogueContextTurn[];
+}
+

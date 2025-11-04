@@ -8,8 +8,8 @@ import {
   upsertDialogueState,
 } from "@/lib/dialogue/store";
 import { classifyStepTaxonomy } from "@/lib/meno/taxonomy";
-import type { DialogueRecap, StudentTurnFeedback } from "@/lib/dialogue/types";
-import { generateRecap } from "@/lib/meno/reasoner";
+import type { DialogueRecap, DialogueTurnRequest } from "@/lib/dialogue/types";
+import { generateNextPrompt, generateRecap } from "@/lib/meno/reasoner";
 
 type Success = {
   ok: true;
@@ -34,12 +34,7 @@ type Success = {
 type Failure = { ok: false; error: string };
 
 export async function POST(request: Request): Promise<Response> {
-  let payload: {
-    sessionId?: string;
-    planId?: string;
-    advance?: boolean;
-    studentTurn?: StudentTurnFeedback;
-  };
+  let payload: DialogueTurnRequest;
 
   try {
     payload = await request.json();
@@ -55,105 +50,130 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const plan = await fetchHspPlan(payload.planId);
+  try {
+    const plan = await fetchHspPlan(payload.planId);
 
-  if (!plan) {
-    return NextResponse.json<Failure>(
-      { ok: false, error: "Hidden solution plan not found" },
-      { status: 404 },
-    );
-  }
-
-  const steps = plan.steps ?? [];
-  let state = await getDialogueState(payload.sessionId);
-
-  if (!state || state.planId !== plan.id) {
-    state = createInitialState(payload.sessionId, plan.id);
-  }
-
-  if (payload.advance && state.currentStepIndex < steps.length) {
-    const completedStep = steps[state.currentStepIndex];
-    if (completedStep) {
-      const completedSet = new Set([...state.completedStepIds, completedStep.id]);
-      state.completedStepIds = Array.from(completedSet);
+    if (!plan) {
+      return NextResponse.json<Failure>(
+        { ok: false, error: "Hidden solution plan not found" },
+        { status: 404 },
+      );
     }
-    state.currentStepIndex = Math.min(state.currentStepIndex + 1, steps.length);
-    state.hintLevel = 0;
-    state.attemptCount = 0;
-    state.lastPromptAt = new Date().toISOString();
-  }
 
-  const done = state.currentStepIndex >= steps.length;
-  const currentStep = done ? null : steps[state.currentStepIndex];
-  const hints = currentStep?.hints ?? [];
+    const steps = plan.steps ?? [];
+    let state = await getDialogueState(payload.sessionId);
 
-  if (payload.studentTurn && !done) {
-    const now = new Date().toISOString();
-    state.lastStudentTurnAt = now;
+    if (!state || state.planId !== plan.id) {
+      state = createInitialState(payload.sessionId, plan.id);
+    }
 
-    switch (payload.studentTurn.outcome) {
-      case "productive":
-        state.attemptCount = 0;
-        break;
-      case "inconclusive":
-      case "unproductive":
-        state.attemptCount += 1;
-        if (hints.length > 0 && state.attemptCount >= 2 && state.hintLevel < hints.length) {
-          state.hintLevel += 1;
+    if (payload.advance && state.currentStepIndex < steps.length) {
+      const completedStep = steps[state.currentStepIndex];
+      if (completedStep) {
+        const completedSet = new Set([...state.completedStepIds, completedStep.id]);
+        state.completedStepIds = Array.from(completedSet);
+      }
+      state.currentStepIndex = Math.min(state.currentStepIndex + 1, steps.length);
+      state.hintLevel = 0;
+      state.attemptCount = 0;
+      state.lastPromptAt = new Date().toISOString();
+    }
+
+    const done = state.currentStepIndex >= steps.length;
+    const currentStep = done ? null : steps[state.currentStepIndex];
+    const hints = currentStep?.hints ?? [];
+
+    if (payload.studentTurn && !done) {
+      const now = new Date().toISOString();
+      state.lastStudentTurnAt = now;
+
+      switch (payload.studentTurn.outcome) {
+        case "productive":
           state.attemptCount = 0;
-        }
-        break;
-      default:
-        break;
+          break;
+        case "inconclusive":
+        case "unproductive":
+          state.attemptCount += 1;
+          if (hints.length > 0 && state.attemptCount >= 2 && state.hintLevel < hints.length) {
+            state.hintLevel += 1;
+            state.attemptCount = 0;
+          }
+          break;
+        default:
+          break;
+      }
     }
-  }
 
-  state.updatedAt = new Date().toISOString();
+    state.updatedAt = new Date().toISOString();
 
-  await upsertDialogueState(state);
-
-  const activeHint = !done && state.hintLevel > 0 && hints[state.hintLevel - 1] ? hints[state.hintLevel - 1] : null;
-  const brevityInstruction = done
-    ? "Provide a concise recap in ≤3 sentences and invite reflection."
-    : state.hintLevel > 0
-    ? "Offer the next hint concisely (≤2 sentences) and end with a focused question."
-    : "Respond in no more than 2 sentences and finish with a focused question.";
-
-  const response: Success = {
-    ok: true,
-    data: {
-      step: currentStep,
-      promptTemplate: currentStep?.prompt ?? null,
-      stepIndex: state.currentStepIndex,
-      totalSteps: steps.length,
-      completedStepIds: state.completedStepIds,
-      done,
-      goal: plan.goal,
-      summary: plan.summary,
-      taxonomy: classifyStepTaxonomy(currentStep),
-      hintLevel: state.hintLevel,
-      hint: activeHint,
-      instructions: brevityInstruction,
-      attemptCount: state.attemptCount,
-      recap: done && !state.recapIssued
-        ? await generateRecap({
-            goal: plan.goal,
-            summary: plan.summary,
-            steps: plan.steps.map((step, index) => ({
-              title: step.title,
-              prompt: step.prompt,
-              hintLevel: index < state.hintLevel ? state.hintLevel : 0,
-            })),
-          })
-        : undefined,
-    },
-  };
-
-  if (done) {
-    state.recapIssued = true;
     await upsertDialogueState(state);
-  }
 
-  return NextResponse.json(response);
+    const activeHint = !done && state.hintLevel > 0 && hints[state.hintLevel - 1] ? hints[state.hintLevel - 1] : null;
+    const brevityInstruction = done
+      ? "Provide a concise recap in ≤3 sentences and invite reflection."
+      : state.hintLevel > 0
+      ? "Offer the next hint concisely (≤2 sentences) and end with a focused question."
+      : "Respond in no more than 2 sentences and finish with a focused question.";
+
+    const contextTranscript = payload.transcript ?? [];
+    const taxonomy = classifyStepTaxonomy(currentStep);
+
+    const promptTemplate = !done && currentStep
+      ? (await generateNextPrompt({
+          stepTitle: currentStep.title,
+          stepPrompt: currentStep.prompt,
+          taxonomy: taxonomy.key,
+          directive: brevityInstruction,
+          hint: activeHint,
+          transcript: contextTranscript,
+          goal: plan.goal,
+        }).catch((error) => {
+          console.error("Prompt generation failed", error);
+          return null;
+        })) ?? currentStep.prompt
+      : null;
+
+    const response: Success = {
+      ok: true,
+      data: {
+        step: currentStep,
+        promptTemplate,
+        stepIndex: state.currentStepIndex,
+        totalSteps: steps.length,
+        completedStepIds: state.completedStepIds,
+        done,
+        goal: plan.goal,
+        summary: plan.summary,
+        taxonomy,
+        hintLevel: state.hintLevel,
+        hint: activeHint,
+        instructions: brevityInstruction,
+        attemptCount: state.attemptCount,
+        recap: done && !state.recapIssued
+          ? await generateRecap({
+              goal: plan.goal,
+              summary: plan.summary,
+              steps: plan.steps.map((step, index) => ({
+                title: step.title,
+                prompt: step.prompt,
+                hintLevel: index < state.hintLevel ? state.hintLevel : 0,
+              })),
+              transcript: contextTranscript,
+            })
+          : undefined,
+      },
+    };
+
+    if (done) {
+      state.recapIssued = true;
+      await upsertDialogueState(state);
+    }
+
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error("Dialogue handler error", error);
+    const message = error instanceof Error ? error.message : "Unknown dialogue error";
+    return NextResponse.json<Failure>({ ok: false, error: message }, { status: 500 });
+  }
 }
 
