@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 
 export type ParticipantRole = "student" | "teacher" | "observer";
 export type SessionPhase = "idle" | "joining" | "active" | "completed";
+export type SessionDifficulty = "beginner" | "intermediate" | "advanced";
 
 export interface Participant {
   id: string;
@@ -13,11 +14,13 @@ export interface Participant {
 
 interface SessionState {
   sessionId: string | null;
+  sessionName: string | null;
   participantId: string | null;
   participantName: string;
   role: ParticipantRole;
   phase: SessionPhase;
   participants: Participant[];
+  difficulty: SessionDifficulty;
   setSessionId: (sessionId: string | null) => void;
   setParticipant: (payload: {
     id: string;
@@ -25,6 +28,10 @@ interface SessionState {
     role?: ParticipantRole;
   }) => void;
   setPhase: (phase: SessionPhase) => void;
+  setSessionMeta: (meta: {
+    sessionName?: string | null;
+    difficulty?: SessionDifficulty;
+  }) => void;
   setParticipants: (list: Participant[]) => void;
   upsertParticipant: (participant: Participant) => void;
   removeParticipant: (id: string) => void;
@@ -33,19 +40,23 @@ interface SessionState {
 
 type SessionBaseState = {
   sessionId: string | null;
+  sessionName: string | null;
   participantId: string | null;
   participantName: string;
   role: ParticipantRole;
   phase: SessionPhase;
+  difficulty: SessionDifficulty;
   participants: Participant[];
 };
 
 const baseSession: SessionBaseState = {
   sessionId: null,
+  sessionName: null,
   participantId: null,
   participantName: "",
   role: "student" as ParticipantRole,
   phase: "idle" as SessionPhase,
+  difficulty: "beginner" as SessionDifficulty,
   participants: [],
 };
 
@@ -61,6 +72,12 @@ export const useSessionStore = create<SessionState>()(
           role: role ?? state.role,
         })),
       setPhase: (phase) => set({ phase }),
+      setSessionMeta: ({ sessionName, difficulty }) =>
+        set((state) => ({
+          sessionName:
+            sessionName !== undefined ? sessionName : state.sessionName,
+          difficulty: difficulty ?? state.difficulty,
+        })),
       setParticipants: (list) => set({ participants: list }),
       upsertParticipant: (participant) =>
         set((state) => {
@@ -83,9 +100,11 @@ export const useSessionStore = create<SessionState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         sessionId: state.sessionId,
+        sessionName: state.sessionName,
         participantId: state.participantId,
         participantName: state.participantName,
         role: state.role,
+        difficulty: state.difficulty,
       }),
     },
   ),

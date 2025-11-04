@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { SessionJoinFlow } from "@/components/session/SessionJoinFlow";
+
 export default function Home() {
   return (
     <div className="flex flex-col gap-12">
@@ -37,6 +39,8 @@ export default function Home() {
           </Link>
         </div>
       </section>
+
+      <SessionJoinFlow />
 
       <section className="grid gap-6 md:grid-cols-2">
         <article className="rounded-xl border border-[var(--border)] bg-paper/90 p-6 shadow-sm backdrop-blur">

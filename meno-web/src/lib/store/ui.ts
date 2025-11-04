@@ -16,6 +16,7 @@ interface UiState {
   closeSheet: () => void;
   resetUi: () => void;
   dismissBanner: () => void;
+  showBanner: () => void;
 }
 
 const cycleTheme = (theme: ThemePreference): ThemePreference => {
@@ -42,6 +43,7 @@ export const useUiStore = create<UiState>()(
       openSheet: (id) => set({ activeSheet: id }),
       closeSheet: () => set({ activeSheet: null }),
       dismissBanner: () => set({ bannerDismissed: true }),
+      showBanner: () => set({ bannerDismissed: false }),
       resetUi: () => set(initialState),
     }),
     {
