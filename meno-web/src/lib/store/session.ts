@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+import type { HspPlan } from "@/lib/hsp/schema";
+
 export type ParticipantRole = "student" | "teacher" | "observer";
 export type SessionPhase = "idle" | "joining" | "active" | "completed";
 export type SessionDifficulty = "beginner" | "intermediate" | "advanced";
@@ -21,6 +23,8 @@ interface SessionState {
   phase: SessionPhase;
   participants: Participant[];
   difficulty: SessionDifficulty;
+  hspPlanId: string | null;
+  hspPlan?: HspPlan | null;
   setSessionId: (sessionId: string | null) => void;
   setParticipant: (payload: {
     id: string;
@@ -35,6 +39,7 @@ interface SessionState {
   setParticipants: (list: Participant[]) => void;
   upsertParticipant: (participant: Participant) => void;
   removeParticipant: (id: string) => void;
+  setHspPlan: (plan: HspPlan | null) => void;
   resetSession: () => void;
 }
 
@@ -47,6 +52,8 @@ type SessionBaseState = {
   phase: SessionPhase;
   difficulty: SessionDifficulty;
   participants: Participant[];
+  hspPlanId: string | null;
+  hspPlan?: HspPlan | null;
 };
 
 const baseSession: SessionBaseState = {
@@ -58,6 +65,8 @@ const baseSession: SessionBaseState = {
   phase: "idle" as SessionPhase,
   difficulty: "beginner" as SessionDifficulty,
   participants: [],
+  hspPlanId: null,
+  hspPlan: null,
 };
 
 export const useSessionStore = create<SessionState>()(
@@ -93,6 +102,11 @@ export const useSessionStore = create<SessionState>()(
         set((state) => ({
           participants: state.participants.filter((p) => p.id !== id),
         })),
+      setHspPlan: (plan) =>
+        set({
+          hspPlanId: plan?.id ?? null,
+          hspPlan: plan ?? null,
+        }),
       resetSession: () => set({ ...baseSession, participants: [] }),
     }),
     {
@@ -105,6 +119,7 @@ export const useSessionStore = create<SessionState>()(
         participantName: state.participantName,
         role: state.role,
         difficulty: state.difficulty,
+        hspPlanId: state.hspPlanId,
       }),
     },
   ),

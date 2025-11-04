@@ -57,7 +57,7 @@ export default function RootLayout({
             <ThemeToggle />
           </header>
           <main className="flex-1 rounded-2xl border border-[var(--border)] bg-paper/95 p-8 shadow-sm">
-            {children}
+        {children}
           </main>
           <footer className="flex flex-col gap-1 pb-4 pt-2 font-sans text-sm text-muted">
             <span>Inspired by Plato’s dialogue.</span>

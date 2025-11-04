@@ -32,17 +32,18 @@ function pullLatexBlocks(text: string, explicitLatex?: string) {
   const matches: string[] = [];
   const segments: Array<{ id: string; content: string; display?: boolean }> = [];
   let cleaned = text;
-  cleaned = cleaned.replace(latexBlockRegex, (_, block, inline) => {
-    const latex = block ?? inline;
+  cleaned = cleaned.replace(latexBlockRegex, (match, block, inline) => {
+    const latex = (block ?? inline ?? "").trim();
     if (latex) {
-      matches.push(latex.trim());
+      matches.push(latex);
       segments.push({
         id: `inline-${segments.length + 1}`,
-        content: latex.trim(),
+        content: latex,
         display: Boolean(block),
       });
+      return block ? `$$${latex}$$` : `$${latex}$`;
     }
-    return latex ?? "";
+    return match;
   });
 
   return {

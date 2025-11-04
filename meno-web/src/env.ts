@@ -8,6 +8,10 @@ const serverSchema = z.object({
         .string()
         .min(1, "SUPABASE_SERVICE_ROLE_KEY is required")
         .optional(),
+    AWS_REGION: z.string().optional(),
+    AWS_ACCESS_KEY_ID: z.string().optional(),
+    AWS_SECRET_ACCESS_KEY: z.string().optional(),
+    HSP_TABLE_NAME: z.string().optional(),
 });
 
 const clientSchema = z.object({

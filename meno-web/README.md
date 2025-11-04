@@ -28,11 +28,15 @@ Environment variables are validated at runtime by `src/env.ts`. Missing or malfo
 | `OPENAI_API_KEY` | Server | LLM orchestration (Hidden Solution Plan + Dialogue) |
 | `MATHPIX_APP_ID` / `MATHPIX_APP_KEY` | Server | OCR provider credentials for problem ingestion |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server | Server-side Supabase operations (presence, transcripts) |
+| `AWS_REGION` | Server | AWS region for HSP DynamoDB persistence |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Server | AWS credentials (omit if using instance roles) |
+| `HSP_TABLE_NAME` | Server | DynamoDB table name for hidden solution plans |
 | `NEXT_PUBLIC_APP_URL` | Client | Base URL used for links and share targets |
 | `NEXT_PUBLIC_SUPABASE_URL` | Client | Supabase project URL for realtime/presence |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client | Public anon key for Supabase client |
 
 > Copy `.env.example` → `.env.local` and update values per environment. Optional variables can remain blank during early development; validation only enforces format when provided.
+> DynamoDB: create the table referenced by `HSP_TABLE_NAME` with a partition key `planId` (string).
 
 ## Scripts
 

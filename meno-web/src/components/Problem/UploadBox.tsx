@@ -15,6 +15,9 @@ import { cn } from "@/components/ui/cn";
 import { useSessionStore } from "@/lib/store/session";
 import { RichMathText } from "@/components/Math/RichMathText";
 import { KaTeXBlock } from "@/components/Math/KaTeXBlock";
+import { showToast } from "@/components/ui/Toast";
+import { normalizeId } from "@/lib/utils/id";
+import type { HspPlan } from "@/lib/hsp/schema";
 
 type UploadStatus = "queued" | "processing" | "succeeded" | "failed";
 
@@ -50,11 +53,54 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const sessionId = useSessionStore((state) => state.sessionId);
+  const setHspPlan = useSessionStore((state) => state.setHspPlan);
 
   const processingUpload = uploads.find((upload) => upload.status === "processing");
   const queuedUpload = useMemo(
     () => uploads.find((upload) => upload.status === "queued"),
     [uploads],
+  );
+
+  const maybeGenerateHspPlan = useCallback(
+    async (
+      file: File,
+      result: NonNullable<UploadItem["result"]>,
+      currentSessionId: string | null,
+    ) => {
+      if (!currentSessionId) {
+        return;
+      }
+
+      const problemId = normalizeId(file.name.replace(/\.[^.]+$/, "")) || `problem-${Date.now()}`;
+
+      try {
+        const response = await fetch("/api/hsp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: currentSessionId,
+            problemId,
+            canonicalText: result.canonicalText,
+            goal: result.plainText,
+          }),
+        });
+
+        const payload = (await response.json()) as
+          | { ok: true; data: HspPlan }
+          | { ok: false; error: string };
+
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.ok ? "Failed to create plan" : payload.error);
+        }
+
+        setHspPlan(payload.data);
+        showToast({ variant: "success", title: "Solution plan ready" });
+      } catch (error) {
+        console.error("HSP generation failed", error);
+        showToast({ variant: "error", title: "Plan generation failed" });
+      }
+    },
+    [setHspPlan],
   );
 
   const processUpload = useCallback(
@@ -74,7 +120,15 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
         });
 
         const data = (await response.json()) as
-          | { ok: true; data: { canonicalText: string; latex?: string; plainText: string } }
+          | {
+              ok: true;
+              data: {
+                canonicalText: string;
+                latex?: string;
+                plainText: string;
+                mathSegments?: Array<{ id: string; content: string; display?: boolean }>;
+              };
+            }
           | { ok: false; error: string };
 
         if (!response.ok || !data.ok) {
@@ -90,6 +144,8 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
         );
 
         onResult?.(data.data, upload.file);
+
+        await maybeGenerateHspPlan(upload.file, data.data, sessionId ?? null);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unexpected error";
         setUploads((prev) =>
@@ -99,7 +155,7 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
         );
       }
     },
-    [onResult, sessionId],
+    [maybeGenerateHspPlan, onResult, sessionId],
   );
 
   useEffect(() => {

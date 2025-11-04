@@ -1,10 +1,19 @@
+"use client";
+
+import { useMemo } from "react";
+
 import { ChatPane } from "@/components/ChatPane/ChatPane";
 import { ProblemHeader } from "@/components/Problem/ProblemHeader";
 import { UploadBox } from "@/components/Problem/UploadBox";
 import type { ProblemMeta } from "@/lib/types/problem";
+import { useSessionStore } from "@/lib/store/session";
+import type { HspPlan } from "@/lib/hsp/schema";
 
 export default function ChatDemoPage() {
-  const demoProblem: ProblemMeta = {
+  const hspPlan = useSessionStore((state) => state.hspPlan);
+
+  const demoProblem: ProblemMeta = useMemo(
+    () => ({
     id: "pythagorean-recollection",
     title: "Doubling the Square",
     description:
@@ -52,14 +61,64 @@ export default function ChatDemoPage() {
       author: "Socratic Demo",
       createdAt: "2024-07-12T00:00:00Z",
     },
-  };
+    }),
+    [],
+  );
+
+  const activeProblem = useMemo<ProblemMeta>(() => {
+    if (!hspPlan) return demoProblem;
+    return planToProblemMeta(hspPlan, demoProblem);
+  }, [demoProblem, hspPlan]);
 
   return (
     <div className="flex flex-col items-center gap-8">
-      <ProblemHeader meta={demoProblem} className="w-full max-w-3xl" />
+      <ProblemHeader meta={activeProblem} className="w-full max-w-3xl" />
       <ChatPane className="w-full max-w-3xl" />
       <UploadBox className="w-full max-w-3xl" />
     </div>
   );
 }
+
+const planToProblemMeta = (plan: HspPlan, fallback: ProblemMeta): ProblemMeta => {
+  const canonical = typeof plan.meta?.canonicalText === "string" ? plan.meta.canonicalText : undefined;
+  const difficulty = fallback.context?.difficulty;
+  const domain = (plan.meta?.domain as ProblemMeta["context"] | undefined)?.domain ?? fallback.context?.domain ?? "math";
+
+  return {
+    id: plan.problemId,
+    title: (plan.meta?.title as string) ?? fallback.title,
+    description: plan.summary ?? fallback.description,
+    context: {
+      domain: (domain as ProblemMeta["context"]["domain"]) ?? "math",
+      difficulty: difficulty,
+      source: (plan.meta?.source as string) ?? fallback.context?.source,
+    },
+    knowns: canonical
+      ? [
+          {
+            label: "Canonical",
+            value: canonical,
+          },
+        ]
+      : fallback.knowns,
+    unknowns: [
+      {
+        label: "To Demonstrate",
+        value: plan.goal || fallback.goal,
+      },
+    ],
+    goal: plan.goal || fallback.goal,
+    hints:
+      plan.steps.flatMap((step) => step.hints ?? []).length > 0
+        ? plan.steps.flatMap((step) => step.hints ?? [])
+        : fallback.hints,
+    keywords: fallback.keywords,
+    relatedConcepts: fallback.relatedConcepts,
+    evaluation: fallback.evaluation,
+    metadata: {
+      ...fallback.metadata,
+      updatedAt: plan.updatedAt ?? new Date().toISOString(),
+    },
+  };
+};
 
