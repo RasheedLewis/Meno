@@ -8,6 +8,10 @@ export interface DialogueState {
   planId: string;
   currentStepIndex: number;
   completedStepIds: string[];
+  hintLevel: number;
+  attemptCount: number;
+  lastPromptAt?: string;
+  lastStudentTurnAt?: string;
   updatedAt: string;
 }
 
@@ -25,7 +29,17 @@ export const getDialogueState = async (sessionId: string): Promise<DialogueState
   });
 
   const result = await client.send(command);
-  return (result.Item as DialogueState) ?? null;
+  if (!result.Item) return null;
+
+  const state = result.Item as DialogueState;
+  if (typeof state.hintLevel !== "number") {
+    state.hintLevel = 0;
+  }
+  if (typeof state.attemptCount !== "number") {
+    state.attemptCount = 0;
+  }
+
+  return state;
 };
 
 export const upsertDialogueState = async (state: DialogueState): Promise<void> => {
@@ -35,7 +49,10 @@ export const upsertDialogueState = async (state: DialogueState): Promise<void> =
 
   const command = new PutCommand({
     TableName: tableName,
-    Item: state,
+    Item: {
+      ...state,
+      updatedAt: new Date().toISOString(),
+    },
   });
 
   await client.send(command);
@@ -46,6 +63,10 @@ export const createInitialState = (sessionId: string, planId: string): DialogueS
   planId,
   currentStepIndex: 0,
   completedStepIds: [],
+  hintLevel: 0,
+  attemptCount: 0,
   updatedAt: new Date().toISOString(),
+  lastPromptAt: new Date().toISOString(),
+  lastStudentTurnAt: undefined,
 });
 
