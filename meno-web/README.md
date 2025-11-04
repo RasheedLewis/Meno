@@ -30,7 +30,8 @@ Environment variables are validated at runtime by `src/env.ts`. Missing or malfo
 | `SUPABASE_SERVICE_ROLE_KEY` | Server | Server-side Supabase operations (presence, transcripts) |
 | `AWS_REGION` | Server | AWS region for HSP DynamoDB persistence |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Server | AWS credentials (omit if using instance roles) |
-| `HSP_TABLE_NAME` | Server | DynamoDB table name for hidden solution plans |
+| `HSP_TABLE_NAME` | Server | DynamoDB table for hidden solution plans |
+| `DIALOGUE_TABLE_NAME` | Server | DynamoDB table for dialogue state & step progress |
 | `NEXT_PUBLIC_APP_URL` | Client | Base URL used for links and share targets |
 | `NEXT_PUBLIC_SUPABASE_URL` | Client | Supabase project URL for realtime/presence |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client | Public anon key for Supabase client |

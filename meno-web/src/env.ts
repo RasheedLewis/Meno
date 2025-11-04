@@ -12,6 +12,7 @@ const serverSchema = z.object({
     AWS_ACCESS_KEY_ID: z.string().optional(),
     AWS_SECRET_ACCESS_KEY: z.string().optional(),
     HSP_TABLE_NAME: z.string().optional(),
+    DIALOGUE_TABLE_NAME: z.string().optional(),
 });
 
 const clientSchema = z.object({

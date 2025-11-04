@@ -1,12 +1,12 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 
 import { env } from "@/env";
+import { getDocumentClient } from "@/lib/aws/dynamo";
 import type { HspPlan } from "./schema";
 
 const tableName = env.HSP_TABLE_NAME;
 
-const client = createClient();
+const client = getDocumentClient();
 
 export async function persistHspPlan(plan: HspPlan): Promise<void> {
   if (!tableName) {
@@ -31,24 +31,17 @@ export async function persistHspPlan(plan: HspPlan): Promise<void> {
   await client.send(command);
 }
 
-function createClient() {
-  if (!env.AWS_REGION) {
-    throw new Error("AWS_REGION must be set for DynamoDB access");
+export const fetchHspPlan = async (planId: string) => {
+  if (!tableName) {
+    throw new Error("HSP_TABLE_NAME must be defined to retrieve plans");
   }
 
-  const base = new DynamoDBClient({
-    region: env.AWS_REGION,
-    credentials:
-      env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY
-        ? {
-            accessKeyId: env.AWS_ACCESS_KEY_ID,
-            secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-          }
-        : undefined,
+  const command = new GetCommand({
+    TableName: tableName,
+    Key: { planId },
   });
 
-  return DynamoDBDocumentClient.from(base, {
-    marshallOptions: { removeUndefinedValues: true },
-  });
-}
+  const result = await client.send(command);
+  return result.Item as HspPlan | undefined;
+};
 
