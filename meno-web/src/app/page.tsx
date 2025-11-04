@@ -27,6 +27,15 @@ export default function Home() {
             <span aria-hidden>→</span>
           </Link>
         </div>
+        <div>
+          <Link
+            href="/chat"
+            className="inline-flex items-center gap-2 font-sans text-sm text-accent underline-offset-4 transition hover:underline"
+          >
+            Explore the chat pane prototype
+            <span aria-hidden>→</span>
+          </Link>
+        </div>
       </section>
 
       <section className="grid gap-6 md:grid-cols-2">
