@@ -1,9 +1,11 @@
+"use client";
 import type { SVGProps } from "react";
 
 import { RichMathText } from "@/components/Math/RichMathText";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import type { ProblemMeta } from "@/lib/types/problem";
+import { showToast } from "@/components/ui/Toast";
 
 interface ProblemHeaderProps {
   meta: ProblemMeta;
@@ -61,6 +63,7 @@ export function ProblemHeader({ meta, className }: ProblemHeaderProps) {
         <p className="font-serif text-lg leading-relaxed text-[var(--ink)]">
           {meta.goal}
         </p>
+        <CopyControls className="mt-3" plain={meta.goal} latex={meta.goal} />
       </section>
 
       {meta.hints && meta.hints.length > 0 ? (
@@ -103,10 +106,15 @@ const InfoGroup = ({
       {items.length > 0 ? (
         items.map((item, index) => (
           <li key={index} className="rounded-xl border border-[var(--border)] bg-[var(--paper)]/80 px-4 py-3">
-            <p className="font-sans text-xs uppercase tracking-[0.3em] text-[var(--muted)]">
-              {item.label}
-            </p>
-            <RichMathText text={item.value} className="font-serif text-base text-[var(--ink)]" />
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="font-sans text-xs uppercase tracking-[0.3em] text-[var(--muted)]">
+                  {item.label}
+                </p>
+                <RichMathText text={item.value} className="font-serif text-base text-[var(--ink)]" />
+              </div>
+              <CopyButtons plain={item.value} latex={item.value} />
+            </div>
           </li>
         ))
       ) : (
@@ -117,6 +125,102 @@ const InfoGroup = ({
     </ul>
   </div>
 );
+
+const CopyButtons = ({
+  plain,
+  latex,
+  className,
+}: {
+  plain: string;
+  latex?: string;
+  className?: string;
+}) => <CopyControls plain={plain} latex={latex} className={className} />;
+
+const CopyControls = ({
+  plain,
+  latex,
+  className,
+}: {
+  plain: string;
+  latex?: string;
+  className?: string;
+}) => (
+  <div className={cn("flex flex-wrap gap-2", className)}>
+    <CopyButton
+      label="Copy plain text"
+      icon={DocumentIcon}
+      payload={plain}
+      success="Copied text"
+    />
+    {latex ? (
+      <CopyButton
+        label="Copy LaTeX"
+        icon={BracesIcon}
+        payload={latex}
+        success="Copied LaTeX"
+        variant="accent"
+      />
+    ) : null}
+  </div>
+);
+
+const CopyButton = ({
+  label,
+  icon: Icon,
+  payload,
+  success,
+  variant,
+}: {
+  label: string;
+  icon: IconComponent;
+  payload: string;
+  success: string;
+  variant?: "default" | "accent";
+}) => {
+  const handleCopy = async () => {
+    try {
+      await copyToClipboard(payload);
+      showToast({ variant: "success", title: success });
+    } catch (error) {
+      console.error("Copy failed", error);
+      showToast({ variant: "error", title: "Copy failed" });
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border p-2 transition",
+        variant === "accent"
+          ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/20"
+          : "border-[var(--border)] bg-[var(--paper)] text-[var(--muted)] hover:bg-[var(--paper)]/80",
+      )}
+      title={label}
+      aria-label={label}
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </button>
+  );
+};
+
+const copyToClipboard = async (value: string) => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "absolute";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+};
 
 const FooterMeta = ({ meta }: { meta: ProblemMeta }) => {
   const keywords = meta.keywords ?? [];
@@ -286,6 +390,19 @@ const LinkIcon: IconComponent = (props) => (
       strokeLinejoin="round"
     />
     <path d="M7.5 12.5l5-5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const DocumentIcon: IconComponent = (props) => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" {...props}>
+    <path d="M6 2.75h5.5L16.5 8v9.25a1 1 0 01-1 1H6a1 1 0 01-1-1V3.75a1 1 0 011-1z" />
+    <path d="M11.5 2.75V7H16.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const BracesIcon: IconComponent = (props) => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" {...props}>
+    <path d="M7.25 3C5.5 3 5 4.5 5 6c0 1.5-.5 3-2 3 1.5 0 2 .5 2 2 0 1.5.5 3 2.25 3M12.75 3C14.5 3 15 4.5 15 6c0 1.5.5 3 2 3-1.5 0-2 .5-2 2 0 1.5-.5 3-2.25 3" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
