@@ -17,13 +17,15 @@ const createMessageId = () => {
 
 const nowIso = () => new Date().toISOString();
 
+const seedTimestamp = "2024-01-01T00:00:00.000Z";
+
 const seedTranscript: ChatTranscript = [
   {
-    id: createMessageId(),
+    id: "seed-meno-welcome",
     role: "meno",
     content:
       "Welcome. When you feel ready, tell me what part of this problem you want to untangle first.",
-    createdAt: nowIso(),
+    createdAt: seedTimestamp,
     meta: {
       source: "system",
       channel: "public",
@@ -31,20 +33,20 @@ const seedTranscript: ChatTranscript = [
     },
   },
   {
-    id: createMessageId(),
+    id: "seed-student-question",
     role: "student",
     content: "I'm stuck isolating x in 2x + 5 = 13.",
-    createdAt: nowIso(),
+    createdAt: seedTimestamp,
     meta: {
       source: "chat",
       channel: "public",
     },
   },
   {
-    id: createMessageId(),
+    id: "seed-meno-followup",
     role: "meno",
     content: "Good. What's the very last thing happening to x on the left-hand side?",
-    createdAt: nowIso(),
+    createdAt: seedTimestamp,
     meta: {
       source: "chat",
       channel: "public",

@@ -7,6 +7,7 @@ interface UiState {
   theme: ThemePreference;
   activeModal: string | null;
   activeSheet: string | null;
+  bannerDismissed: boolean;
   setTheme: (theme: ThemePreference) => void;
   toggleTheme: () => void;
   openModal: (id: string) => void;
@@ -14,6 +15,7 @@ interface UiState {
   openSheet: (id: string) => void;
   closeSheet: () => void;
   resetUi: () => void;
+  dismissBanner: () => void;
 }
 
 const cycleTheme = (theme: ThemePreference): ThemePreference => {
@@ -26,6 +28,7 @@ const initialState = {
   theme: "system" as ThemePreference,
   activeModal: null,
   activeSheet: null,
+  bannerDismissed: false,
 };
 
 export const useUiStore = create<UiState>()(
@@ -38,12 +41,13 @@ export const useUiStore = create<UiState>()(
       closeModal: () => set({ activeModal: null }),
       openSheet: (id) => set({ activeSheet: id }),
       closeSheet: () => set({ activeSheet: null }),
+      dismissBanner: () => set({ bannerDismissed: true }),
       resetUi: () => set(initialState),
     }),
     {
       name: "meno-ui",
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ theme: state.theme }),
+      partialize: (state) => ({ theme: state.theme, bannerDismissed: state.bannerDismissed }),
     },
   ),
 );

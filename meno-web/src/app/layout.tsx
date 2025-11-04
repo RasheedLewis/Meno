@@ -3,6 +3,7 @@ import { EB_Garamond, Inter } from "next/font/google";
 
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { ThemeWatcher } from "@/components/system/ThemeWatcher";
+import { SystemPromptBanner } from "@/components/session/SystemPromptBanner";
 
 import "./globals.css";
 
@@ -37,6 +38,7 @@ export default function RootLayout({
     >
       <body className="font-serif bg-surface text-ink antialiased">
         <ThemeWatcher />
+        <SystemPromptBanner />
         <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-8 px-6 py-10">
           <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="flex flex-col gap-2">
