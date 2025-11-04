@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Next.js / React build output
+.next/
+out/
+dist/
+.turbo/
+
+# Caches and logs
+.pnpm-store/
+.yarn/cache/
+.parcel-cache/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing and coverage
+coverage/
+.nyc_output/
+
+# Env files
+.env*
+!.env.example
+!.env.test
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Supabase & local services
+supabase/.branches/
+supabase/.temp/
+docker-data/
+
+# Misc
+tmp/
+*.swp
+*.swo
+
+# SpecStory
+.specstory/
+
+
