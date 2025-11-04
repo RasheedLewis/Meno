@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <div className="flex flex-col gap-12">
@@ -15,6 +17,15 @@ export default function Home() {
           <span>Voice + Captions</span>
           <span>Shared Canvas</span>
           <span>Hidden Solution Plan</span>
+        </div>
+        <div>
+          <Link
+            href="/ui"
+            className="inline-flex items-center gap-2 font-sans text-sm text-accent underline-offset-4 transition hover:underline"
+          >
+            Preview the UI primitives
+            <span aria-hidden>→</span>
+          </Link>
         </div>
       </section>
 
