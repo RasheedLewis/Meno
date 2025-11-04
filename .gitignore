@@ -35,6 +35,7 @@ Thumbs.db
 supabase/.branches/
 supabase/.temp/
 docker-data/
+.npm-cache/
 
 # Misc
 tmp/

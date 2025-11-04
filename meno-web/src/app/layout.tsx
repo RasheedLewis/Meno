@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import { EB_Garamond, Inter } from "next/font/google";
+
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { ThemeWatcher } from "@/components/system/ThemeWatcher";
+
 import "./globals.css";
 
 const garamond = EB_Garamond({
@@ -26,19 +30,27 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${garamond.variable} ${inter.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${garamond.variable} ${inter.variable}`}
+    >
       <body className="font-serif bg-surface text-ink antialiased">
+        <ThemeWatcher />
         <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-8 px-6 py-10">
-          <header className="flex flex-col gap-2">
-            <span className="text-sm font-medium uppercase tracking-[0.3em] text-accent/80">
-              Guided by Questions
-            </span>
-            <h1 className="text-4xl font-semibold leading-tight text-ink">
-              Meno
-            </h1>
-            <p className="font-sans text-lg text-muted">
-              The classical Socratic tutor for mathematics.
-            </p>
+          <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium uppercase tracking-[0.3em] text-accent/80">
+                Guided by Questions
+              </span>
+              <h1 className="text-4xl font-semibold leading-tight text-ink">
+                Meno
+              </h1>
+              <p className="font-sans text-lg text-muted">
+                The classical Socratic tutor for mathematics.
+              </p>
+            </div>
+            <ThemeToggle />
           </header>
           <main className="flex-1 rounded-2xl border border-[var(--border)] bg-paper/95 p-8 shadow-sm">
             {children}

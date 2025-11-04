@@ -8,10 +8,56 @@ import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Sheet } from "@/components/ui/Sheet";
+import { useSessionStore } from "@/lib/store/session";
 
 export default function UiShowcasePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const sessionId = useSessionStore((state) => state.sessionId);
+  const setSessionId = useSessionStore((state) => state.setSessionId);
+  const participantId = useSessionStore((state) => state.participantId);
+  const participantName = useSessionStore((state) => state.participantName);
+  const setParticipant = useSessionStore((state) => state.setParticipant);
+  const phase = useSessionStore((state) => state.phase);
+  const setPhase = useSessionStore((state) => state.setPhase);
+  const upsertParticipant = useSessionStore((state) => state.upsertParticipant);
+  const participants = useSessionStore((state) => state.participants);
+  const resetSession = useSessionStore((state) => state.resetSession);
+  const storeSnapshot = JSON.stringify(
+    {
+      sessionId: sessionId ?? "—",
+      phase,
+      participants: participants.length,
+    },
+    null,
+    2,
+  );
+
+  const handleSessionIdChange = (value: string) => {
+    const trimmed = value.trim();
+    setSessionId(trimmed.length === 0 ? null : trimmed);
+  };
+
+  const handleParticipantNameChange = (value: string) => {
+    const id = participantId ?? "local-client";
+    setParticipant({ id, name: value });
+    upsertParticipant({
+      id,
+      name: value || "Anonymous",
+      role: "student",
+      presence: "online",
+    });
+  };
+
+  const handleJoinSession = () => {
+    const name = participantName || "Anonymous";
+    const id = participantId ?? crypto.randomUUID();
+    const effectiveSession = sessionId ?? `session-${id.slice(0, 5)}`;
+    setSessionId(effectiveSession);
+    setParticipant({ id, name });
+    upsertParticipant({ id, name, role: "student", presence: "online" });
+    setPhase("active");
+  };
 
   return (
     <div className="flex flex-col gap-10">
@@ -84,6 +130,76 @@ export default function UiShowcasePage() {
             </p>
             <Button onClick={() => setIsSheetOpen(true)}>Open Sheet</Button>
           </CardBody>
+        </Card>
+      </section>
+
+      <section className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>Session Store</CardHeader>
+          <CardBody className="space-y-5">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="flex flex-col gap-2 font-sans text-sm text-[var(--muted)]">
+                Session ID
+                <Input
+                  value={sessionId ?? ""}
+                  placeholder="e.g. algebra-101"
+                  onChange={(event) => handleSessionIdChange(event.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-2 font-sans text-sm text-[var(--muted)]">
+                Your name
+                <Input
+                  value={participantName}
+                  placeholder="Add a display name"
+                  onChange={(event) => handleParticipantNameChange(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="primary" onClick={handleJoinSession}>
+                Join / Resume Session
+              </Button>
+              <Button variant="ghost" onClick={resetSession}>
+                Reset
+              </Button>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--paper)]/70 p-4 font-mono text-xs leading-relaxed text-[var(--muted)]">
+              <p className="mb-2 font-sans text-sm font-medium uppercase tracking-wider text-[var(--ink)]">
+                Store Snapshot
+              </p>
+              <pre className="whitespace-pre-wrap">{storeSnapshot}</pre>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>Phase Controls</CardHeader>
+          <CardBody className="flex flex-col gap-3">
+            <p className="font-sans text-sm text-[var(--muted)]">
+              Future flows will transition phases automatically. For now, toggle states to
+              validate orchestration logic.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(["idle", "joining", "active", "completed"] as const).map((state) => (
+                <Button
+                  key={state}
+                  size="sm"
+                  variant={phase === state ? "primary" : "secondary"}
+                  onClick={() => setPhase(state)}
+                >
+                  {state}
+                </Button>
+              ))}
+            </div>
+            <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--paper)]/60 p-4 font-sans text-sm text-[var(--muted)]">
+              Active participants: {participants.map((p) => p.name || "Anonymous").join(", ") || "—"}
+            </div>
+          </CardBody>
+          <CardFooter>
+            <span className="font-sans text-sm text-[var(--muted)]">
+              Zustand persistence keeps session context across refreshes.
+            </span>
+          </CardFooter>
         </Card>
       </section>
 
