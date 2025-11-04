@@ -77,8 +77,11 @@ Canonical problem statement:
 ${input.canonicalText}
 """
 
-Generate a JSON plan with fields {id, goal, summary, steps[]}.
+Generate a JSON plan with fields {id, goal, lessonTitle, summary, keywords[], relatedConcepts[], meta, steps[]}.
 Each step should include: id, title, prompt (question to ask the learner), optional check expression (JavaScript or pseudocode), optional hints[], tags[], dependencies[].
+
+The lessonTitle must be a concise, table-of-contents style name suitable for a mathematics curriculum (e.g., "Pythagorean Theorem – Diagonal Length"). Avoid literal phrases such as "Plain Text" or "Canonical Text".
+Include keywords[] with succinct topic tags students might search for ("geometry", "square roots", etc.).
 
 Goal defaults to the learner's objective if not explicitly provided. Ensure the plan has 3-6 concise steps.`;
 

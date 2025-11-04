@@ -10,7 +10,7 @@ interface RichMathTextProps {
   className?: string;
 }
 
-const mathRegex = /\$\$([\s\S]+?)\$\$|\$([^$]+?)\$/g;
+const mathRegex = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$([^$]+?)\$/g;
 
 export function RichMathText({ text, className }: RichMathTextProps) {
   const segments = [] as Array<
@@ -22,15 +22,15 @@ export function RichMathText({ text, className }: RichMathTextProps) {
   let match: RegExpExecArray | null;
 
   while ((match = mathRegex.exec(text)) !== null) {
-    const [fullMatch, displayGroup, inlineGroup] = match;
+    const [fullMatch, displayDollar, displayBracket, inlineParen, inlineDollar] = match;
     const matchIndex = match.index ?? 0;
 
     if (matchIndex > lastIndex) {
       segments.push({ type: "text", value: text.slice(lastIndex, matchIndex) });
     }
 
-    const mathValue = (displayGroup ?? inlineGroup ?? "").trim();
-    segments.push({ type: "math", value: mathValue, display: Boolean(displayGroup) });
+    const mathValue = (displayDollar ?? displayBracket ?? inlineParen ?? inlineDollar ?? "").trim();
+    segments.push({ type: "math", value: mathValue, display: Boolean(displayDollar ?? displayBracket) });
 
     lastIndex = matchIndex + fullMatch.length;
   }

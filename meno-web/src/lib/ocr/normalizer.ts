@@ -22,7 +22,7 @@ export function normalizeOcrOutput(extraction: OcrExtraction): NormalizedOcrResu
   };
 }
 
-const latexBlockRegex = /\$\$([\s\S]+?)\$\$|\$([^$]+)\$/g;
+const latexBlockRegex = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$([^$]+?)\$/g;
 
 function pullLatexBlocks(text: string, explicitLatex?: string) {
   if (explicitLatex) {
@@ -32,16 +32,25 @@ function pullLatexBlocks(text: string, explicitLatex?: string) {
   const matches: string[] = [];
   const segments: Array<{ id: string; content: string; display?: boolean }> = [];
   let cleaned = text;
-  cleaned = cleaned.replace(latexBlockRegex, (match, block, inline) => {
-    const latex = (block ?? inline ?? "").trim();
+  cleaned = cleaned.replace(latexBlockRegex, (match, displayBlock, bracketBlock, inlineParen, inlineDollar) => {
+    const latex = (displayBlock ?? bracketBlock ?? inlineParen ?? inlineDollar ?? "").trim();
     if (latex) {
       matches.push(latex);
       segments.push({
         id: `inline-${segments.length + 1}`,
         content: latex,
-        display: Boolean(block),
+        display: Boolean(displayBlock ?? bracketBlock),
       });
-      return block ? `$$${latex}$$` : `$${latex}$`;
+      if (displayBlock) {
+        return `$$${latex}$$`;
+      }
+      if (bracketBlock) {
+        return `\\[${latex}\\]`;
+      }
+      if (inlineParen) {
+        return `\\(${latex}\\)`;
+      }
+      return `$${latex}$`;
     }
     return match;
   });
