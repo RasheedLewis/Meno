@@ -1,3 +1,5 @@
+export type TaxonomyKey = "definitional" | "analytical" | "proportional" | "spectral" | "evaluative";
+
 export interface HspStep {
   id: string;
   title: string;
@@ -6,6 +8,7 @@ export interface HspStep {
   hints?: string[];
   tags?: string[];
   dependencies?: string[];
+  taxonomy?: TaxonomyKey;
 }
 
 export interface HspPlan {

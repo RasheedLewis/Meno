@@ -1,6 +1,6 @@
 import { env } from "@/env";
 import { normalizeId } from "@/lib/utils/id";
-import type { GenerateHspInput, HspPlan, HspStep } from "./schema";
+import type { GenerateHspInput, HspPlan, HspStep, TaxonomyKey } from "./schema";
 
 const MODEL = "gpt-4.1-mini";
 
@@ -53,6 +53,7 @@ export async function generateHiddenSolutionPlan(input: GenerateHspInput): Promi
     hints: step.hints ?? [],
     tags: step.tags ?? [],
     dependencies: step.dependencies ?? [],
+    taxonomy: sanitizeTaxonomy(step.taxonomy, step.tags),
   }));
 
   return {
@@ -78,10 +79,11 @@ ${input.canonicalText}
 """
 
 Generate a JSON plan with fields {id, goal, lessonTitle, summary, keywords[], relatedConcepts[], meta, steps[]}.
-Each step should include: id, title, prompt (question to ask the learner), optional check expression (JavaScript or pseudocode), optional hints[], tags[], dependencies[].
+Each step should include: id, title, prompt (question to ask the learner), optional check expression (JavaScript or pseudocode), optional hints[], tags[], dependencies[], taxonomy.
 
 The lessonTitle must be a concise, table-of-contents style name suitable for a mathematics curriculum (e.g., "Pythagorean Theorem – Diagonal Length"). Avoid literal phrases such as "Plain Text" or "Canonical Text".
 Include keywords[] with succinct topic tags students might search for ("geometry", "square roots", etc.).
+For each step, taxonomy must be one of ["definitional","analytical","proportional","spectral","evaluative"]. If a step blends multiple types, pick the dominant intent and include other signals in tags[].
 
 Goal defaults to the learner's objective if not explicitly provided. Ensure the plan has 3-6 concise steps.`;
 
@@ -120,5 +122,35 @@ interface RawStep {
   hints?: string[];
   tags?: string[];
   dependencies?: string[];
+  taxonomy?: string;
 }
+
+const sanitizeTaxonomy = (taxonomy?: string, tags?: string[]): TaxonomyKey | undefined => {
+  const lowered = taxonomy?.toLowerCase();
+  if (isTaxonomyKey(lowered)) {
+    return lowered;
+  }
+
+  if (Array.isArray(tags)) {
+    for (const tag of tags) {
+      const normalized = tag.toLowerCase();
+      if (isTaxonomyKey(normalized)) {
+        return normalized;
+      }
+    }
+  }
+
+  return undefined;
+};
+
+const TAXONOMY_KEYS: TaxonomyKey[] = [
+  "definitional",
+  "analytical",
+  "proportional",
+  "spectral",
+  "evaluative",
+];
+
+const isTaxonomyKey = (value?: string): value is TaxonomyKey =>
+  value ? (TAXONOMY_KEYS as string[]).includes(value) : false;
 

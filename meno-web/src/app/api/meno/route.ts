@@ -7,6 +7,7 @@ import {
   getDialogueState,
   upsertDialogueState,
 } from "@/lib/dialogue/store";
+import { classifyStepTaxonomy } from "@/lib/meno/taxonomy";
 
 type Success = {
   ok: true;
@@ -19,6 +20,7 @@ type Success = {
     done: boolean;
     goal: string;
     summary?: string;
+    taxonomy: ReturnType<typeof classifyStepTaxonomy>;
   };
 };
 
@@ -88,6 +90,7 @@ export async function POST(request: Request): Promise<Response> {
       done,
       goal: plan.goal,
       summary: plan.summary,
+      taxonomy: classifyStepTaxonomy(currentStep),
     },
   };
 
