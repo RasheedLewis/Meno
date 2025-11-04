@@ -8,7 +8,8 @@ import {
   upsertDialogueState,
 } from "@/lib/dialogue/store";
 import { classifyStepTaxonomy } from "@/lib/meno/taxonomy";
-import type { StudentTurnFeedback } from "@/lib/dialogue/types";
+import type { DialogueRecap, StudentTurnFeedback } from "@/lib/dialogue/types";
+import { generateRecap } from "@/lib/meno/reasoner";
 
 type Success = {
   ok: true;
@@ -26,6 +27,7 @@ type Success = {
     hint: string | null;
     attemptCount: number;
     instructions: string;
+    recap?: DialogueRecap;
   };
 };
 
@@ -133,8 +135,24 @@ export async function POST(request: Request): Promise<Response> {
       hint: activeHint,
       instructions: brevityInstruction,
       attemptCount: state.attemptCount,
+      recap: done && !state.recapIssued
+        ? await generateRecap({
+            goal: plan.goal,
+            summary: plan.summary,
+            steps: plan.steps.map((step, index) => ({
+              title: step.title,
+              prompt: step.prompt,
+              hintLevel: index < state.hintLevel ? state.hintLevel : 0,
+            })),
+          })
+        : undefined,
     },
   };
+
+  if (done) {
+    state.recapIssued = true;
+    await upsertDialogueState(state);
+  }
 
   return NextResponse.json(response);
 }

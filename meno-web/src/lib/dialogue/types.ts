@@ -5,3 +5,9 @@ export interface StudentTurnFeedback {
   content?: string;
 }
 
+export interface DialogueRecap {
+  summary: string;
+  highlights: string[];
+  nextFocus?: string;
+}
+

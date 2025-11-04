@@ -13,6 +13,7 @@ export interface DialogueState {
   lastPromptAt?: string;
   lastStudentTurnAt?: string;
   updatedAt: string;
+  recapIssued?: boolean;
 }
 
 const tableName = env.DIALOGUE_TABLE_NAME;
@@ -37,6 +38,9 @@ export const getDialogueState = async (sessionId: string): Promise<DialogueState
   }
   if (typeof state.attemptCount !== "number") {
     state.attemptCount = 0;
+  }
+  if (typeof state.recapIssued !== "boolean") {
+    state.recapIssued = false;
   }
 
   return state;
@@ -68,5 +72,6 @@ export const createInitialState = (sessionId: string, planId: string): DialogueS
   updatedAt: new Date().toISOString(),
   lastPromptAt: new Date().toISOString(),
   lastStudentTurnAt: undefined,
+  recapIssued: false,
 });
 
