@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { useSessionStore } from "@/lib/store/session";
+import { RichMathText } from "@/components/Math/RichMathText";
+import { KaTeXBlock } from "@/components/Math/KaTeXBlock";
 
 type UploadStatus = "queued" | "processing" | "succeeded" | "failed";
 
@@ -24,6 +26,7 @@ interface UploadItem {
     canonicalText: string;
     latex?: string;
     plainText: string;
+    mathSegments?: Array<{ id: string; content: string; display?: boolean }>;
   };
   error?: string;
 }
@@ -219,12 +222,27 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
                     <p className="font-sans text-xs uppercase tracking-[0.3em] text-[var(--muted)]">
                       Canonical Text
                     </p>
-                    <p className="font-serif text-sm leading-relaxed text-[var(--ink)] whitespace-pre-wrap">
-                      {upload.result.canonicalText}
-                    </p>
-                    {upload.result.latex ? (
-                      <div className="font-mono text-xs text-[var(--muted)]">
-                        <span className="text-[var(--ink)] font-semibold">LaTeX:</span> {upload.result.latex}
+                    <RichMathText
+                      text={upload.result.canonicalText}
+                      className="font-serif text-sm leading-relaxed text-[var(--ink)] whitespace-pre-wrap"
+                    />
+                    {upload.result.mathSegments && upload.result.mathSegments.length ? (
+                      <div className="space-y-2 text-xs text-[var(--muted)]">
+                        <span className="font-sans uppercase tracking-[0.3em] text-[var(--muted)]">
+                          Extracted Equations
+                        </span>
+                        <ul className="space-y-2">
+                          {upload.result.mathSegments.map((segment) => (
+                            <li key={segment.id} className="rounded-lg border border-[var(--border)] bg-[var(--paper)] px-3 py-2">
+                              <KaTeXBlock
+                                expression={segment.content}
+                                displayMode={segment.display}
+                                inline={!segment.display}
+                                className="font-serif text-base text-[var(--ink)]"
+                              />
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     ) : null}
                   </div>
