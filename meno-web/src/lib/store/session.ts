@@ -25,6 +25,8 @@ interface SessionState {
   difficulty: SessionDifficulty;
   hspPlanId: string | null;
   hspPlan?: HspPlan | null;
+  isLoading: boolean;
+  error: string | null;
   setSessionId: (sessionId: string | null) => void;
   setParticipant: (payload: {
     id: string;
@@ -40,6 +42,14 @@ interface SessionState {
   upsertParticipant: (participant: Participant) => void;
   removeParticipant: (id: string) => void;
   setHspPlan: (plan: HspPlan | null) => void;
+  setLoading: (loading: boolean) => void;
+  setError: (message: string | null) => void;
+  hydrateFromServer: (payload: {
+    sessionId: string;
+    sessionName?: string | null;
+    difficulty?: SessionDifficulty | null;
+    participants?: Participant[];
+  }) => void;
   resetSession: () => void;
 }
 
@@ -54,6 +64,8 @@ type SessionBaseState = {
   participants: Participant[];
   hspPlanId: string | null;
   hspPlan?: HspPlan | null;
+  isLoading: boolean;
+  error: string | null;
 };
 
 const baseSession: SessionBaseState = {
@@ -67,6 +79,8 @@ const baseSession: SessionBaseState = {
   participants: [],
   hspPlanId: null,
   hspPlan: null,
+  isLoading: false,
+  error: null,
 };
 
 export const useSessionStore = create<SessionState>()(
@@ -107,6 +121,15 @@ export const useSessionStore = create<SessionState>()(
           hspPlanId: plan?.id ?? null,
           hspPlan: plan ?? null,
         }),
+      setLoading: (isLoading) => set({ isLoading }),
+      setError: (error) => set({ error }),
+      hydrateFromServer: ({ sessionId, sessionName, difficulty, participants }) =>
+        set((state) => ({
+          sessionId,
+          sessionName: sessionName ?? state.sessionName,
+          difficulty: difficulty ?? state.difficulty,
+          participants: participants ?? state.participants,
+        })),
       resetSession: () => set({ ...baseSession, participants: [] }),
     }),
     {

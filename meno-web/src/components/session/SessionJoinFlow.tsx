@@ -1,114 +1,60 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { showToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
-import {
-  useSessionStore,
-  type Participant,
-  type SessionDifficulty,
-} from "@/lib/store/session";
+import { useSessionStore, type Participant, type SessionDifficulty } from "@/lib/store/session";
+import { normalizeSessionCode } from "@/lib/session/code";
 import { useUiStore } from "@/lib/store/ui";
 
 type Step = "welcome" | "identity" | "join" | "create" | "lobby";
 type Mode = "join" | "create";
 
-interface DemoSession {
-  code: string;
-  name: string;
-  difficulty: SessionDifficulty;
-  participants: Participant[];
-}
-
-const SESSION_CAPACITY = 4;
-const INITIAL_SESSIONS: DemoSession[] = [
-  {
-    code: "4B6D",
-    name: "Algebra Warmup",
-    difficulty: "beginner",
-    participants: [
-      { id: "demo-1", name: "Theo", role: "student", presence: "online" },
-      { id: "demo-2", name: "Mira", role: "student", presence: "online" },
-    ],
-  },
-  {
-    code: "EUCL",
-    name: "Geometry Circle",
-    difficulty: "intermediate",
-    participants: [
-      { id: "demo-3", name: "Ada", role: "student", presence: "online" },
-    ],
-  },
-];
-
 const codePattern = /^[A-Z0-9]{4,8}$/;
 const namePattern = /^[A-Za-z]{1,20}$/;
 const sessionNameMax = 40;
 
-const digitsToSubscript: Record<string, string> = {
-  "0": "₀",
-  "1": "₁",
-  "2": "₂",
-  "3": "₃",
-  "4": "₄",
-  "5": "₅",
-  "6": "₆",
-  "7": "₇",
-  "8": "₈",
-  "9": "₉",
+interface JoinErrors {
+  name: string | null;
+  code: string | null;
+  general: string | null;
+}
+
+const INITIAL_ERRORS: JoinErrors = {
+  name: null,
+  code: null,
+  general: null,
 };
 
-const toSubscript = (value: number) =>
-  value
-    .toString()
-    .split("")
-    .map((digit) => digitsToSubscript[digit] ?? digit)
-    .join("");
+interface SessionJoinFlowProps {
+  className?: string;
+}
 
-const ensureUniqueName = (name: string, existing: string[]) => {
-  if (!existing.includes(name)) return name;
+const participantIdKey = "meno-participant-id";
 
-  let suffix = 2;
-  let candidate = `${name}${toSubscript(suffix)}`;
-  while (existing.includes(candidate)) {
-    suffix += 1;
-    candidate = `${name}${toSubscript(suffix)}`;
-  }
-  return candidate;
+const ensureParticipantId = () => {
+  if (typeof window === "undefined") return `participant-${Math.random().toString(36).slice(2, 10)}`;
+  const existing = localStorage.getItem(participantIdKey);
+  if (existing) return existing;
+  const id = globalThis.crypto?.randomUUID?.() ?? `participant-${Math.random().toString(36).slice(2, 10)}`;
+  localStorage.setItem(participantIdKey, id);
+  return id;
 };
 
-const generateParticipantId = () => {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `participant-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`;
-};
-
-const generateSessionCode = (existingCodes: Set<string>) => {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  do {
-    code = Array.from({ length: 4 }, () =>
-      alphabet[Math.floor(Math.random() * alphabet.length)],
-    ).join("");
-  } while (existingCodes.has(code));
-  return code;
-};
-
-export function SessionJoinFlow({ className }: { className?: string }) {
+export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
   const router = useRouter();
 
   const participantName = useSessionStore((state) => state.participantName);
-  const participantId = useSessionStore((state) => state.participantId);
+  const participantId = useMemo(() => ensureParticipantId(), []);
   const role = useSessionStore((state) => state.role);
   const setParticipant = useSessionStore((state) => state.setParticipant);
   const setSessionId = useSessionStore((state) => state.setSessionId);
   const setSessionMeta = useSessionStore((state) => state.setSessionMeta);
-  const setParticipants = useSessionStore((state) => state.setParticipants);
   const setPhase = useSessionStore((state) => state.setPhase);
   const participants = useSessionStore((state) => state.participants);
   const difficulty = useSessionStore((state) => state.difficulty);
@@ -117,13 +63,11 @@ export function SessionJoinFlow({ className }: { className?: string }) {
 
   const [step, setStep] = useState<Step>("welcome");
   const [mode, setMode] = useState<Mode>("join");
-
   const [nameInput, setNameInput] = useState(participantName);
   const [nameError, setNameError] = useState<string | null>(null);
 
   const [codeInput, setCodeInput] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
-  const [joinAttempts, setJoinAttempts] = useState(0);
 
   const [sessionNameInput, setSessionNameInput] = useState("");
   const [sessionNameError, setSessionNameError] = useState<string | null>(null);
@@ -131,14 +75,16 @@ export function SessionJoinFlow({ className }: { className?: string }) {
     difficulty ?? "beginner",
   );
 
-  const [sessions, setSessions] = useState<Map<string, DemoSession>>(
-    () =>
-      new Map(INITIAL_SESSIONS.map((session) => [session.code, { ...session }])),
-  );
+  const [errors, setErrors] = useState<JoinErrors>(INITIAL_ERRORS);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sessionSummary, setSessionSummary] = useState<{
+    code: string;
+    name: string | null;
+    difficulty: SessionDifficulty | null;
+    maxParticipants: number;
+  } | null>(null);
 
-  const isRateLimited = joinAttempts >= 3;
-
-  const existingCodes = useMemo(() => new Set(sessions.keys()), [sessions]);
+  const isRateLimited = false; // Removed demo session rate limiting
 
   useEffect(() => {
     if (step === "lobby") {
@@ -146,38 +92,32 @@ export function SessionJoinFlow({ className }: { className?: string }) {
     }
   }, [step, showBanner]);
 
-  const validateName = () => {
+  const validateNameInput = () => {
     const trimmed = nameInput.trim();
     if (!trimmed) {
       setNameError("Please enter your name.");
-      return false;
+      return { ok: false as const };
     }
     if (!namePattern.test(trimmed)) {
       setNameError("Use 1–20 letters (A–Z).");
-      return false;
+      return { ok: false as const };
     }
     setNameError(null);
-    setNameInput(trimmed);
-    return true;
+    return { ok: true as const, value: trimmed };
   };
 
-  const validateCode = () => {
+  const validateCodeInput = () => {
     const trimmed = codeInput.trim().toUpperCase();
+    if (!trimmed) {
+      setCodeError("Enter your session code.");
+      return { ok: false as const };
+    }
     if (!codePattern.test(trimmed)) {
       setCodeError("Please enter a valid code (A–Z, 0–9).");
-      return null;
-    }
-    const session = sessions.get(trimmed);
-    if (!session) {
-      setCodeError("This session doesn’t exist.");
-      return null;
-    }
-    if (session.participants.length >= SESSION_CAPACITY) {
-      setCodeError("That session is full (4 students max).");
-      return null;
+      return { ok: false as const };
     }
     setCodeError(null);
-    return trimmed;
+    return { ok: true as const, value: trimmed };
   };
 
   const validateSessionName = () => {
@@ -199,7 +139,7 @@ export function SessionJoinFlow({ className }: { className?: string }) {
   };
 
   const handleIdentitySubmit = () => {
-    if (!validateName()) {
+    if (!validateNameInput().ok) {
       return;
     }
     if (mode === "join") {
@@ -209,103 +149,186 @@ export function SessionJoinFlow({ className }: { className?: string }) {
     }
   };
 
-  const handleJoinSession = () => {
-    if (isRateLimited) return;
+  const setGlobalLoading = useSessionStore((state) => state.setLoading);
+  const setGlobalError = useSessionStore((state) => state.setError);
+  const hydrateSession = useSessionStore((state) => state.hydrateFromServer);
 
-    const validCode = validateCode();
-    if (!validCode) {
-      setJoinAttempts((count) => count + 1);
+  const handleCreate = async () => {
+    const nameResult = validateNameInput();
+    const sessionNameValid = validateSessionName();
+    if (!nameResult.ok || !sessionNameValid) {
       return;
     }
 
-    const session = sessions.get(validCode);
-    if (!session) {
-      setCodeError("This session doesn’t exist.");
-      setJoinAttempts((count) => count + 1);
-      return;
+    setErrors(INITIAL_ERRORS);
+    setIsSubmitting(true);
+    setGlobalLoading(true);
+    setGlobalError(null);
+
+    try {
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: sessionNameInput,
+          difficulty: difficultyInput,
+          participant: {
+            id: participantId,
+            name: nameResult.value,
+            role: role,
+          },
+        }),
+      });
+
+      const payload = (await response.json()) as
+        | {
+            ok: true;
+            data: {
+              sessionId: string;
+              code: string;
+              name: string | null;
+              difficulty: string | null;
+              participant: { id: string; name: string; role: ParticipantRole };
+              maxParticipants: number;
+            };
+          }
+        | { ok: false; error: string };
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.ok ? "Failed to create session" : payload.error);
+      }
+
+      const sessionId = payload.data.sessionId;
+      setSessionId(sessionId);
+      setParticipant({ id: participantId, name: payload.data.participant.name, role: payload.data.participant.role });
+      setNameInput(payload.data.participant.name);
+      hydrateSession({
+        sessionId,
+        sessionName: payload.data.name,
+        difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? null,
+        participants: [
+          {
+            id: payload.data.participant.id,
+            name: payload.data.participant.name,
+            role: payload.data.participant.role,
+            presence: "online",
+          } satisfies Participant,
+        ],
+      });
+      setSessionMeta({ sessionName: payload.data.name, difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? undefined });
+      setSessionSummary({
+        code: payload.data.code,
+        name: payload.data.name,
+        difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? null,
+        maxParticipants: payload.data.maxParticipants,
+      });
+      setCodeInput(payload.data.code);
+      setStep("lobby");
+      setPhase("joining");
+      showToast({
+        variant: "success",
+        title: "Session ready",
+        description: `Share code ${payload.data.code} with up to ${payload.data.maxParticipants} learners guided by Meno.`,
+      });
+    } catch (error) {
+      console.error("Session create failed", error);
+      const message = error instanceof Error ? error.message : "Unable to create session";
+      setErrors((prev) => ({ ...prev, general: message }));
+      setGlobalError(message);
+    } finally {
+      setIsSubmitting(false);
+      setGlobalLoading(false);
     }
-
-    const trimmedName = nameInput.trim();
-    const participantNames = session.participants.map((p) => p.name);
-    const uniqueName = ensureUniqueName(trimmedName, participantNames);
-    const id = participantId ?? generateParticipantId();
-
-    const newParticipant: Participant = {
-      id,
-      name: uniqueName,
-      role: "student",
-      presence: "online",
-    };
-
-    const updatedSession: DemoSession = {
-      ...session,
-      participants: [...session.participants, newParticipant],
-    };
-
-    setSessions((prev) => {
-      const clone = new Map(prev);
-      clone.set(validCode, updatedSession);
-      return clone;
-    });
-
-    setParticipant({ id, name: uniqueName });
-    setSessionId(validCode);
-    setSessionMeta({ sessionName: session.name, difficulty: session.difficulty });
-    setParticipants(updatedSession.participants);
-    setPhase("joining");
-    setCodeInput(validCode);
-    setJoinAttempts(0);
-    setStep("lobby");
   };
 
-  const handleCreateSession = () => {
-    if (!validateName() || !validateSessionName()) {
+  const handleJoin = async () => {
+    const nameResult = validateNameInput();
+    const codeResult = validateCodeInput();
+    if (!nameResult.ok || !codeResult.ok) {
       return;
     }
 
-    const code = generateSessionCode(existingCodes);
-    const trimmedName = nameInput.trim();
-    const id = participantId ?? generateParticipantId();
+    const normalized = normalizeSessionCode(codeResult.value);
+    setErrors(INITIAL_ERRORS);
+    setIsSubmitting(true);
+    setGlobalLoading(true);
+    setGlobalError(null);
 
-    const newParticipant: Participant = {
-      id,
-      name: trimmedName,
-      role,
-      presence: "online",
-    };
+    try {
+      const response = await fetch("/api/sessions/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: normalized,
+          participant: {
+            id: participantId,
+            name: nameResult.value,
+            role: role,
+          },
+        }),
+      });
 
-    const newSession: DemoSession = {
-      code,
-      name: sessionNameInput || "Untitled Session",
-      difficulty: difficultyInput,
-      participants: [newParticipant],
-    };
+      const payload = (await response.json()) as
+        | {
+            ok: true;
+            data: {
+              sessionId: string;
+              code: string;
+              name: string | null;
+              difficulty: string | null;
+              participants: Array<{ id: string; name: string; role: ParticipantRole }>;
+              maxParticipants: number;
+            };
+          }
+        | { ok: false; error: string };
 
-    setSessions((prev) => {
-      const clone = new Map(prev);
-      clone.set(code, newSession);
-      return clone;
-    });
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.ok ? "Failed to join session" : payload.error);
+      }
 
-    setParticipant({ id, name: trimmedName });
-    setSessionId(code);
-    setSessionMeta({ sessionName: newSession.name, difficulty: difficultyInput });
-    setParticipants(newSession.participants);
-    setPhase("joining");
-    setCodeInput(code);
-    setStep("lobby");
+      setSessionId(payload.data.sessionId);
+      setParticipant({ id: participantId, name: nameResult.value, role });
+      setNameInput(nameResult.value);
+      hydrateSession({
+        sessionId: payload.data.sessionId,
+        sessionName: payload.data.name,
+        difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? null,
+        participants: payload.data.participants.map((participant) => ({
+          id: participant.id,
+          name: participant.name,
+          role: participant.role,
+          presence: "online",
+        })),
+      });
+      setSessionMeta({ sessionName: payload.data.name, difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? undefined });
+      setSessionSummary({
+        code: payload.data.code,
+        name: payload.data.name,
+        difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? null,
+        maxParticipants: payload.data.maxParticipants,
+      });
+      setStep("lobby");
+      setPhase("joining");
+      showToast({
+        variant: "success",
+        title: "Joined session",
+        description: "Let’s see what everyone is thinking.",
+      });
+    } catch (error) {
+      console.error("Session join failed", error);
+      const message = error instanceof Error ? error.message : "Unable to join session";
+      setErrors((prev) => ({ ...prev, general: message }));
+      setGlobalError(message);
+    } finally {
+      setIsSubmitting(false);
+      setGlobalLoading(false);
+    }
   };
 
   const handleStartSession = () => {
     setPhase("active");
     router.push("/chat");
   };
-
-  const lobbySessionInfo = useMemo(() => {
-    if (!codeInput && mode === "join") return null;
-    const targetCode = mode === "join" ? codeInput.trim().toUpperCase() : codeInput;
-    return targetCode ? sessions.get(targetCode) ?? null : null;
-  }, [codeInput, mode, sessions]);
 
   const nameHint = "Used to show who’s speaking and drawing.";
   const codeHint = "Ask your teacher or teammate for their code.";
@@ -369,6 +392,11 @@ export function SessionJoinFlow({ className }: { className?: string }) {
               Enter the code shared by your teacher or teammate.
             </p>
           </div>
+          {errors.general ? (
+            <div className="rounded-xl border border-[#b94a44] bg-[#b94a44]/10 px-3 py-2 text-sm font-sans text-[#b94a44]">
+              {errors.general}
+            </div>
+          ) : null}
           <label className="flex flex-col gap-2 font-sans text-sm text-[var(--muted)]">
             Session Code
             <Input
@@ -388,10 +416,11 @@ export function SessionJoinFlow({ className }: { className?: string }) {
                 Too many attempts. Please wait a moment before trying again.
               </span>
             ) : null}
+            {errors.general ? <span className="text-xs text-[#b94a44]">{errors.general}</span> : null}
           </label>
           <div className="flex justify-between gap-2">
             <Button variant="ghost" onClick={() => setStep("identity")}>Back</Button>
-            <Button variant="primary" onClick={handleJoinSession} disabled={isRateLimited}>
+            <Button variant="primary" onClick={handleJoin} disabled={isSubmitting}>
               Join Session
             </Button>
           </div>
@@ -406,6 +435,11 @@ export function SessionJoinFlow({ className }: { className?: string }) {
               Share the generated code with others to join your group.
             </p>
           </div>
+          {errors.general ? (
+            <div className="rounded-xl border border-[#b94a44] bg-[#b94a44]/10 px-3 py-2 text-sm font-sans text-[#b94a44]">
+              {errors.general}
+            </div>
+          ) : null}
           <label className="flex flex-col gap-2 font-sans text-sm text-[var(--muted)]">
             Session Name <span className="text-xs text-[var(--muted)]">Optional</span>
             <Input
@@ -445,10 +479,11 @@ export function SessionJoinFlow({ className }: { className?: string }) {
           </fieldset>
           <div className="flex justify-between gap-2">
             <Button variant="ghost" onClick={() => setStep("identity")}>Back</Button>
-            <Button variant="primary" onClick={handleCreateSession}>
+            <Button variant="primary" onClick={handleCreate} disabled={isSubmitting}>
               Generate Code
             </Button>
           </div>
+          {errors.general ? <span className="text-xs text-[#b94a44]">{errors.general}</span> : null}
         </div>
       )}
 
@@ -472,10 +507,10 @@ export function SessionJoinFlow({ className }: { className?: string }) {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--paper)]/70 px-4 py-4 font-sans text-sm text-[var(--muted)]">
             <div className="flex items-center justify-between">
               <span className="font-medium text-[var(--ink)]">
-                Session · {lobbySessionInfo?.name ?? "Socratic Circle"}
+                Session · {sessionSummary?.name ?? "Socratic Circle"}
               </span>
               <span className="text-xs uppercase tracking-[0.3em] text-[var(--muted)]">
-                {participants.length}/{SESSION_CAPACITY} joined
+                {participants.length}/{sessionSummary?.maxParticipants ?? 0} joined
               </span>
             </div>
             <ul className="mt-3 space-y-2">
