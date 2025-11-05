@@ -7,8 +7,16 @@ import { showToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
 import { createChatMessage, useChatStore } from "@/lib/store/chat";
 import { useSessionStore } from "@/lib/store/session";
-import type { DialogueContextTurn, StudentTurnFeedback } from "@/lib/dialogue/types";
-import { extractQuickCheckConfig, runQuickChecks } from "@/lib/validate/client";
+import type {
+  DialogueContextTurn,
+  HeavyValidationRecord,
+  StudentTurnFeedback,
+} from "@/lib/dialogue/types";
+import {
+  extractQuickCheckConfig,
+  runQuickChecks,
+  type QuickCheckConfig,
+} from "@/lib/validate/client";
 import type { QuickCheckResult } from "@/lib/dialogue/types";
 
 import { MessageBubble } from "./Message";
@@ -63,6 +71,8 @@ export function ChatPane({ className }: { className?: string }) {
   const [isInitializing, setIsInitializing] = useState(false);
   const [currentStep, setCurrentStep] = useState<DialogueResponse["step"]>(null);
   const [lastQuickCheck, setLastQuickCheck] = useState<QuickCheckResult | null>(null);
+  const [heavyResult, setHeavyResult] = useState<HeavyValidationRecord | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastPlanRef = useRef<string | null>(null);
@@ -101,6 +111,7 @@ export function ChatPane({ className }: { className?: string }) {
     setDone(false);
     setCurrentStep(null);
     setLastQuickCheck(null);
+    setHeavyResult(null);
   };
 
   const initializeDialogue = async (session: string, plan: string) => {
@@ -158,6 +169,11 @@ export function ChatPane({ className }: { className?: string }) {
       }
     } else {
       setLastQuickCheck(null);
+    }
+    if (quickCheckConfig?.referenceExpression) {
+      triggerHeavyValidation(trimmed, quickCheckConfig);
+    } else {
+      setHeavyResult(null);
     }
     sendTurn(trimmed, sessionId, planId, quickCheck ?? undefined);
   };
@@ -344,6 +360,40 @@ export function ChatPane({ className }: { className?: string }) {
     return DEFAULT_NOTE;
   };
 
+  const triggerHeavyValidation = async (content: string, config: QuickCheckConfig | null) => {
+    if (!sessionId || !planId || !config?.referenceExpression) {
+      setHeavyResult(null);
+      return;
+    }
+    setIsValidating(true);
+    try {
+      const response = await fetch("/api/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          planId,
+          referenceExpression: config.referenceExpression,
+          studentExpression: content,
+          expectedUnits: config.expectedUnits,
+        }),
+      });
+      const payload = await response.json();
+      if (payload?.ok) {
+        setHeavyResult(payload.data);
+      } else {
+        showToast({ variant: "warning", title: payload?.error ?? "Validation failed" });
+        setHeavyResult(null);
+      }
+    } catch (error) {
+      console.error("Heavy validation failed", error);
+      showToast({ variant: "error", title: "Validation service unavailable" });
+      setHeavyResult(null);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   return (
     <section
       className={cn(
@@ -411,6 +461,25 @@ export function ChatPane({ className }: { className?: string }) {
           )}
         >
           Quick check: {lastQuickCheck.message ?? lastQuickCheck.code}
+        </div>
+      ) : null}
+
+      {isValidating ? (
+        <div className="border-t border-[var(--border)] bg-[var(--card)]/60 px-6 py-3 font-sans text-xs text-[var(--muted)]">
+          Running symbolic validation…
+        </div>
+      ) : heavyResult ? (
+        <div
+          className={cn(
+            "border-t border-[var(--border)] px-6 py-3 font-sans text-xs",
+            heavyResult.equivalent && heavyResult.unitsMatch
+              ? "text-emerald-600 bg-emerald-500/10"
+              : "text-[#b94a44] bg-[#b94a44]/10",
+          )}
+        >
+          {heavyResult.equivalent ? heavyResult.equivalenceDetail : heavyResult.equivalenceDetail}
+          {!heavyResult.unitsMatch && heavyResult.unitsDetail ? ` — ${heavyResult.unitsDetail}` : null}
+          {heavyResult.unitsMatch && !heavyResult.unitsDetail ? " — Units look consistent." : null}
         </div>
       ) : null}
 

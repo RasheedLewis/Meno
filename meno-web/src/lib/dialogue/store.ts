@@ -2,7 +2,7 @@ import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 
 import { env } from "@/env";
 import { getDocumentClient } from "@/lib/aws/dynamo";
-import type { QuickCheckResult } from "@/lib/dialogue/types";
+import type { HeavyValidationRecord, QuickCheckResult } from "@/lib/dialogue/types";
 
 export interface DialogueState {
   sessionId: string;
@@ -16,6 +16,7 @@ export interface DialogueState {
   updatedAt: string;
   recapIssued?: boolean;
   quickChecks: QuickCheckResult[];
+  validations: HeavyValidationRecord[];
 }
 
 const tableName = env.DIALOGUE_TABLE_NAME;
@@ -46,6 +47,9 @@ export const getDialogueState = async (sessionId: string): Promise<DialogueState
   }
   if (!Array.isArray(state.quickChecks)) {
     state.quickChecks = [];
+  }
+  if (!Array.isArray(state.validations)) {
+    state.validations = [];
   }
 
   return state;
@@ -79,5 +83,6 @@ export const createInitialState = (sessionId: string, planId: string): DialogueS
   lastStudentTurnAt: undefined,
   recapIssued: false,
   quickChecks: [],
+  validations: [],
 });
 

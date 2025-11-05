@@ -23,6 +23,7 @@ export interface DialogueTurnRequest {
   studentTurn?: StudentTurnFeedback;
   transcript?: DialogueContextTurn[];
   quickCheck?: QuickCheckResult;
+  heavyCheck?: HeavyValidationRecord;
 }
 
 export type QuickCheckOutcome = "pass" | "fail" | "inconclusive";
@@ -32,5 +33,15 @@ export interface QuickCheckResult {
   code: string;
   message?: string;
   severity?: "info" | "warning" | "error";
+}
+
+export interface HeavyValidationRecord {
+  equivalent: boolean;
+  unitsMatch: boolean;
+  equivalenceDetail: string;
+  unitsDetail?: string;
+  timestamp: string;
+  referenceExpression?: string;
+  studentExpression?: string;
 }
 

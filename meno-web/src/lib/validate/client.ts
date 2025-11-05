@@ -22,6 +22,8 @@ export type QuickCheckRule =
 
 export interface QuickCheckConfig {
   rules: QuickCheckRule[];
+  referenceExpression?: string;
+  expectedUnits?: string[];
 }
 
 export const extractQuickCheckConfig = (step: HspStep | null): QuickCheckConfig | null => {
@@ -30,12 +32,19 @@ export const extractQuickCheckConfig = (step: HspStep | null): QuickCheckConfig 
   try {
     const parsed = typeof step.check === "string" ? JSON.parse(step.check) : step.check;
     if (!parsed) return null;
-    if (Array.isArray(parsed)) {
-      return { rules: normalizeRules(parsed) };
-    }
-    if (Array.isArray(parsed.rules)) {
-      return { rules: normalizeRules(parsed.rules) };
-    }
+    const ruleList = Array.isArray(parsed)
+      ? normalizeRules(parsed)
+      : Array.isArray(parsed.rules)
+      ? normalizeRules(parsed.rules)
+      : [];
+
+    return {
+      rules: ruleList,
+      referenceExpression: typeof parsed.reference === "string" ? parsed.reference : undefined,
+      expectedUnits: Array.isArray(parsed.expectedUnits)
+        ? parsed.expectedUnits.filter((unit: unknown) => typeof unit === "string")
+        : undefined,
+    };
   } catch (error) {
     console.warn("Failed to parse step check configuration", error);
   }

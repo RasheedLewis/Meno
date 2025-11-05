@@ -32,6 +32,7 @@ Environment variables are validated at runtime by `src/env.ts`. Missing or malfo
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Server | AWS credentials (omit if using instance roles) |
 | `HSP_TABLE_NAME` | Server | DynamoDB table for hidden solution plans |
 | `DIALOGUE_TABLE_NAME` | Server | DynamoDB table for dialogue state & step progress |
+| `SYMPY_SERVICE_URL` | Server | URL for the SymPy validation microservice |
 | `NEXT_PUBLIC_APP_URL` | Client | Base URL used for links and share targets |
 | `NEXT_PUBLIC_SUPABASE_URL` | Client | Supabase project URL for realtime/presence |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client | Public anon key for Supabase client |
