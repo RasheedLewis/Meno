@@ -27,6 +27,7 @@ export interface ProblemMeta {
     createdAt?: string;
     updatedAt?: string;
     author?: string;
+    sourcePlanId?: string;
   };
 }
 
