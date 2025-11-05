@@ -311,7 +311,9 @@ const ContextBadge = ({ icon: Icon, label }: { icon: IconComponent; label: strin
   </span>
 );
 
-type ProblemDomain = NonNullable<ProblemMeta["context"]>["domain"];
+type ProblemContext = NonNullable<ProblemMeta["context"]>;
+type ProblemDomain = ProblemContext["domain"];
+type ProblemDifficulty = ProblemContext["difficulty"];
 
 const formatDomain = (domain: ProblemDomain) => {
   switch (domain) {
@@ -328,8 +330,10 @@ const formatDomain = (domain: ProblemDomain) => {
   }
 };
 
+type ProblemDifficulty = NonNullable<ProblemMeta["context"]>["difficulty"];
+
 const resolveDifficulty = (
-  difficulty?: ProblemMeta["context"]["difficulty"],
+  difficulty?: ProblemDifficulty,
 ) => {
   if (!difficulty) return null;
   if (typeof difficulty === "string") {
