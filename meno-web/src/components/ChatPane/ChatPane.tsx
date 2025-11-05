@@ -472,7 +472,7 @@ export function ChatPane({ className }: { className?: string }) {
   return (
     <section
       className={cn(
-        "flex h-[620px] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--paper)]/95 shadow-strong",
+        "relative flex h-[620px] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--paper)]/95 shadow-strong",
         className,
       )}
     >

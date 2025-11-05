@@ -96,5 +96,31 @@ a:hover {
 }
 
 .shadow-strong {
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0px 24px 48px rgba(20, 16, 6, 0.32);
+}
+
+@keyframes presence_typing {
+  0%,
+  100% {
+    opacity: 0.58;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes presence_reconnect {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[presence_typing_1\.2s_ease-in-out_infinite\],
+  .animate-\[presence_reconnect_2s_linear_infinite\] {
+    animation: none !important;
+  }
 }

@@ -1,4 +1,10 @@
-export type PresenceStatus = "online" | "typing" | "speaking" | "disconnected";
+export type PresenceStatus =
+  | "online"
+  | "typing"
+  | "speaking"
+  | "disconnected"
+  | "muted"
+  | "reconnecting";
 
 export interface PresenceRecord {
   sessionId: string;
@@ -11,6 +17,9 @@ export interface PresenceRecord {
   isSpeaking: boolean;
   lastSeen: string;
   expiresAt?: number;
+  muted?: boolean;
+  addressed?: boolean;
+  caption?: string;
 }
 
 export interface PresenceSnapshot extends PresenceRecord {
