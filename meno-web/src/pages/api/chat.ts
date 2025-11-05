@@ -130,7 +130,11 @@ const createServer = (server: HTTPServer): ChatServer => {
           },
         };
 
-        await persistChatMessage({ sessionId: socket.meta.sessionId, message });
+        try {
+          await persistChatMessage({ sessionId: socket.meta.sessionId, message });
+        } catch (persistenceError) {
+          console.error("Chat persistence failed", persistenceError);
+        }
 
         broadcast(socket.meta.sessionId, {
           type: "chat.message",

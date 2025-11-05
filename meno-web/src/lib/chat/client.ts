@@ -30,6 +30,8 @@ type ServerEvent =
 
 let socket: WebSocket | null = null;
 const outbox: SendOptions[] = [];
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let lastConfig: ConnectConfig | null = null;
 
 const buildUrl = (config: ConnectConfig) => {
   const origin = typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -77,12 +79,23 @@ const send = (options: SendOptions) => {
   );
 };
 
+const scheduleReconnect = () => {
+  if (!lastConfig || reconnectTimer) {
+    return;
+  }
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    chatClient.connect(lastConfig!);
+  }, 1000);
+};
+
 export const chatClient = {
   connect: (config: ConnectConfig) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
       return;
     }
 
+    lastConfig = config;
     socket = new WebSocket(buildUrl(config));
 
     socket.addEventListener("open", () => {
@@ -102,12 +115,17 @@ export const chatClient = {
       }
     });
 
-    socket.addEventListener("close", () => {
+    socket.addEventListener("close", (event) => {
+      console.warn("Chat socket closed", { code: event.code, reason: event.reason });
       socket = null;
+      if (event.code !== 1000 && event.code !== 1001) {
+        scheduleReconnect();
+      }
     });
 
     socket.addEventListener("error", (error) => {
       console.error("Chat socket error", error);
+      scheduleReconnect();
     });
   },
 
@@ -116,6 +134,11 @@ export const chatClient = {
     socket.close();
     socket = null;
     outbox.length = 0;
+    lastConfig = null;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
   },
 
   sendMessage: (options: SendOptions) => {
