@@ -164,7 +164,9 @@ const planToProblemMeta = (plan: HspPlan, fallback: ProblemMeta): ProblemMeta =>
   };
 };
 
-const isProblemDomain = (value: unknown): value is ProblemMeta["context"]["domain"] =>
+type ProblemDomain = NonNullable<ProblemMeta["context"]>["domain"];
+
+const isProblemDomain = (value: unknown): value is ProblemDomain =>
   typeof value === "string" && ["philosophy", "math", "logic", "language", "custom"].includes(value);
 
 const deriveTitle = (plan: HspPlan) => {
