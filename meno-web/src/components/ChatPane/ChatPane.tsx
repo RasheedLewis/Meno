@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { PresenceBar } from "@/components/Presence/PresenceBar";
 import { Button } from "@/components/ui/Button";
 import { showToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
+import { presenceClient } from "@/lib/presence/client";
 import { createChatMessage, useChatStore } from "@/lib/store/chat";
 import { useSessionStore } from "@/lib/store/session";
 import type {
@@ -60,6 +62,9 @@ export function ChatPane({ className }: { className?: string }) {
   const sessionId = useSessionStore((state) => state.sessionId);
   const hspPlan = useSessionStore((state) => state.hspPlan);
   const hspPlanId = useSessionStore((state) => state.hspPlanId);
+  const participantId = useSessionStore((state) => state.participantId);
+  const participantName = useSessionStore((state) => state.participantName);
+  const participantRole = useSessionStore((state) => state.role);
   const planId = hspPlan?.id ?? hspPlanId;
 
   const [input, setInput] = useState("");
@@ -75,6 +80,7 @@ export function ChatPane({ className }: { className?: string }) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastPlanRef = useRef<string | null>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const status = useMemo(
     () => buildStatus(isStreaming, isInitializing),
@@ -101,6 +107,28 @@ export function ChatPane({ className }: { className?: string }) {
     initializeDialogue(sessionId, planId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, planId]);
+
+  useEffect(() => {
+    if (!sessionId || !participantId || !participantName) {
+      presenceClient.disconnect();
+      return;
+    }
+
+    presenceClient.connect({
+      sessionId,
+      participantId,
+      name: participantName,
+      role: participantRole,
+    });
+
+    return () => {
+      presenceClient.disconnect();
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
+    };
+  }, [sessionId, participantId, participantName, participantRole]);
 
   const resetDialogueState = () => {
     clearMessages();
@@ -157,6 +185,11 @@ export function ChatPane({ className }: { className?: string }) {
     addMessage(studentMessage);
     setInput("");
     startStreaming();
+    presenceClient.setTyping(false);
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
     const quickCheckConfig = extractQuickCheckConfig(currentStep ?? null);
     const quickCheck = quickCheckConfig ? runQuickChecks(trimmed, quickCheckConfig) : null;
     if (quickCheck) {
@@ -191,6 +224,17 @@ export function ChatPane({ className }: { className?: string }) {
   const handleClear = () => {
     handleStop();
     resetDialogueState();
+  };
+
+  const signalTyping = () => {
+    presenceClient.setTyping(true);
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+    }
+    typingTimerRef.current = setTimeout(() => {
+      presenceClient.setTyping(false);
+      typingTimerRef.current = null;
+    }, 2500);
   };
 
   const handleAdvanceStep = async () => {
@@ -413,7 +457,8 @@ export function ChatPane({ className }: { className?: string }) {
             {renderHeaderNote()}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <PresenceBar />
           <Button
             variant="outline"
             size="sm"
@@ -492,7 +537,18 @@ export function ChatPane({ className }: { className?: string }) {
         <div className="flex flex-col gap-3">
           <textarea
             value={input}
-            onChange={(event) => setInput(event.target.value)}
+            onChange={(event) => {
+              setInput(event.target.value);
+              if (event.target.value.trim().length > 0) {
+                signalTyping();
+              } else {
+                presenceClient.setTyping(false);
+                if (typingTimerRef.current) {
+                  clearTimeout(typingTimerRef.current);
+                  typingTimerRef.current = null;
+                }
+              }
+            }}
             onKeyDown={handleKeyDown}
             rows={3}
             placeholder="Type your reasoning or question..."

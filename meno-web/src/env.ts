@@ -13,6 +13,7 @@ const serverSchema = z.object({
     AWS_SECRET_ACCESS_KEY: z.string().optional(),
     HSP_TABLE_NAME: z.string().optional(),
     DIALOGUE_TABLE_NAME: z.string().optional(),
+    PRESENCE_TABLE_NAME: z.string().optional(),
     SYMPY_SERVICE_URL: z.string().url().optional(),
 });
 

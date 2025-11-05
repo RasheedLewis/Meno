@@ -104,12 +104,20 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
           }),
         });
 
-        const payload = (await response.json()) as
-          | { ok: true; data: HspPlan }
-          | { ok: false; error: string };
+        let payload: { ok: true; data: HspPlan } | { ok: false; error: string } | null = null;
+        try {
+          payload = (await response.json()) as
+            | { ok: true; data: HspPlan }
+            | { ok: false; error: string };
+        } catch {
+          const fallback = await response.text();
+          throw new Error(
+            fallback ? `Plan service returned invalid JSON: ${fallback}` : "Failed to create plan",
+          );
+        }
 
-        if (!response.ok || !payload.ok) {
-          throw new Error(payload.ok ? "Failed to create plan" : payload.error);
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload && !payload.ok ? payload.error : "Failed to create plan");
         }
 
         setHspPlan(payload.data);

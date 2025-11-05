@@ -42,6 +42,7 @@ See `meno-web/.env.example` for API keys and service configuration. Key variable
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
 - `HSP_TABLE_NAME`
 - `DIALOGUE_TABLE_NAME`
+- `PRESENCE_TABLE_NAME`
 - `SYMPY_SERVICE_URL`
 - `NEXT_PUBLIC_APP_URL`
 - `

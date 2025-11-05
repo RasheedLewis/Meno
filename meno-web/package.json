@@ -11,10 +11,12 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.922.0",
     "@aws-sdk/lib-dynamodb": "^3.922.0",
+    "@types/ws": "^8.18.1",
     "katex": "^0.16.9",
     "next": "16.0.1",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "ws": "^8.18.3",
     "zod": "^4.1.12",
     "zustand": "^5.0.8"
   },
