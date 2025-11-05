@@ -1,5 +1,7 @@
 export type TurnOutcome = "productive" | "unproductive" | "inconclusive";
 
+export type ErrorCategory = "algebraic" | "arithmetic" | "units";
+
 export interface StudentTurnFeedback {
   outcome: TurnOutcome;
   content?: string;
@@ -9,6 +11,7 @@ export interface DialogueRecap {
   summary: string;
   highlights: string[];
   nextFocus?: string;
+  errorCategories?: ErrorCategory[];
 }
 
 export interface DialogueContextTurn {

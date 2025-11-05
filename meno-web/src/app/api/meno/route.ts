@@ -8,8 +8,9 @@ import {
   upsertDialogueState,
 } from "@/lib/dialogue/store";
 import { classifyStepTaxonomy } from "@/lib/meno/taxonomy";
-import type { DialogueRecap, DialogueTurnRequest } from "@/lib/dialogue/types";
+import type { DialogueRecap, DialogueTurnRequest, ErrorCategory } from "@/lib/dialogue/types";
 import { generateNextPrompt, generateRecap } from "@/lib/meno/reasoner";
+import { deriveErrorCategories } from "@/lib/validate/errors";
 
 type Success = {
   ok: true;
@@ -28,6 +29,7 @@ type Success = {
     attemptCount: number;
     instructions: string;
     recap?: DialogueRecap;
+    errorCategories: ErrorCategory[];
   };
 };
 
@@ -121,6 +123,7 @@ export async function POST(request: Request): Promise<Response> {
 
     const contextTranscript = payload.transcript ?? [];
     const taxonomy = classifyStepTaxonomy(currentStep);
+    const errorCategories = deriveErrorCategories(state.quickChecks, state.validations);
 
     const promptTemplate = !done && currentStep
       ? (await generateNextPrompt({
@@ -153,6 +156,7 @@ export async function POST(request: Request): Promise<Response> {
         hint: activeHint,
         instructions: brevityInstruction,
         attemptCount: state.attemptCount,
+        errorCategories,
         recap: done && !state.recapIssued
           ? await generateRecap({
               goal: plan.goal,
@@ -163,6 +167,7 @@ export async function POST(request: Request): Promise<Response> {
                 hintLevel: index < state.hintLevel ? state.hintLevel : 0,
               })),
               transcript: contextTranscript,
+              errorCategories,
             })
           : undefined,
       },

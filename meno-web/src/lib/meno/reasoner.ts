@@ -1,5 +1,5 @@
 import { env } from "@/env";
-import type { DialogueContextTurn, DialogueRecap } from "@/lib/dialogue/types";
+import type { DialogueContextTurn, DialogueRecap, ErrorCategory } from "@/lib/dialogue/types";
 
 const MODEL = "gpt-4.1-mini";
 
@@ -24,6 +24,7 @@ export interface RecapContext {
   summary?: string;
   steps: Array<{ title: string; prompt: string; hintLevel?: number }>;
   transcript?: DialogueContextTurn[];
+  errorCategories?: ErrorCategory[];
 }
 
 export interface NextPromptContext {
@@ -76,10 +77,17 @@ export async function generateRecap(context: RecapContext): Promise<DialogueReca
   const payload = (await response.json()) as OpenAIResponse;
   const json = extractJson(payload);
 
+  const errorCategories = Array.isArray(json.errorCategories)
+    ? (json.errorCategories.filter((value: unknown): value is ErrorCategory =>
+        value === "algebraic" || value === "arithmetic" || value === "units",
+      ) as ErrorCategory[])
+    : undefined;
+
   return {
     summary: json.summary ?? json.recаp ?? "Great work completing the plan!",
     highlights: Array.isArray(json.highlights) ? json.highlights : [],
     nextFocus: typeof json.nextFocus === "string" ? json.nextFocus : undefined,
+    errorCategories,
   } satisfies DialogueRecap;
 }
 
@@ -97,7 +105,11 @@ ${(context.transcript ?? [])
   .map((turn) => `${turn.role.toUpperCase()}: ${turn.content}`)
   .join("\n")}
 
-Return a JSON object with fields {summary: string, highlights: string[], nextFocus?: string}.`;
+Common Error Categories Observed: ${
+  context.errorCategories?.length ? context.errorCategories.join(", ") : "none"
+}
+
+Return a JSON object with fields {summary: string, highlights: string[], nextFocus?: string, errorCategories?: string[]}. If errorCategories are provided, echo them back as a de-duplicated array using the labels "algebraic", "arithmetic", and "units" only.`;
 
 const extractJson = (payload: OpenAIResponse) => {
   const candidates = payload.output_text ?? payload.output?.flatMap((item) =>

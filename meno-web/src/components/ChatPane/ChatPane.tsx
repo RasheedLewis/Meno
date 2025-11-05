@@ -10,6 +10,8 @@ import { useSessionStore } from "@/lib/store/session";
 import type {
   DialogueContextTurn,
   HeavyValidationRecord,
+  ErrorCategory,
+  DialogueRecap,
   StudentTurnFeedback,
 } from "@/lib/dialogue/types";
 import {
@@ -41,11 +43,8 @@ interface DialogueResponse {
   hint: string | null;
   attemptCount: number;
   instructions: string;
-  recap?: {
-    summary: string;
-    highlights: string[];
-    nextFocus?: string;
-  };
+  recap?: DialogueRecap;
+  errorCategories: ErrorCategory[];
 }
 
 const DEFAULT_NOTE = "Socratic Session";
@@ -325,15 +324,21 @@ export function ChatPane({ className }: { className?: string }) {
 
   const buildMenoPrompt = (template: string) => template;
 
-  const buildRecapMessage = (recap: NonNullable<DialogueResponse["recap"]>) => {
+  const formatCategory = (category: ErrorCategory) => category.charAt(0).toUpperCase() + category.slice(1);
+
+  const buildRecapMessage = (recap: DialogueRecap) => {
     const highlights = recap.highlights?.length
       ? `Highlights:\n• ${recap.highlights.join("\n• ")}`
+      : null;
+    const errorSummary = recap.errorCategories?.length
+      ? `Common trouble spots: ${recap.errorCategories.map(formatCategory).join(", ")}`
       : null;
     return [
       "Recap",
       recap.summary,
       highlights,
       recap.nextFocus ? `Next focus: ${recap.nextFocus}` : null,
+      errorSummary,
     ]
       .filter(Boolean)
       .join("\n\n");
