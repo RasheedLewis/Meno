@@ -311,7 +311,9 @@ const ContextBadge = ({ icon: Icon, label }: { icon: IconComponent; label: strin
   </span>
 );
 
-const formatDomain = (domain: ProblemMeta["context"]["domain"]) => {
+type ProblemDomain = NonNullable<ProblemMeta["context"]>["domain"];
+
+const formatDomain = (domain: ProblemDomain) => {
   switch (domain) {
     case "math":
       return "Mathematics";
