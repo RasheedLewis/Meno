@@ -8,6 +8,8 @@ import { cn } from "@/components/ui/cn";
 import { createChatMessage, useChatStore } from "@/lib/store/chat";
 import { useSessionStore } from "@/lib/store/session";
 import type { DialogueContextTurn, StudentTurnFeedback } from "@/lib/dialogue/types";
+import { extractQuickCheckConfig, runQuickChecks } from "@/lib/validate/client";
+import type { QuickCheckResult } from "@/lib/dialogue/types";
 
 import { MessageBubble } from "./Message";
 
@@ -59,6 +61,8 @@ export function ChatPane({ className }: { className?: string }) {
   const [stepTitle, setStepTitle] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [currentStep, setCurrentStep] = useState<DialogueResponse["step"]>(null);
+  const [lastQuickCheck, setLastQuickCheck] = useState<QuickCheckResult | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastPlanRef = useRef<string | null>(null);
@@ -95,6 +99,8 @@ export function ChatPane({ className }: { className?: string }) {
     setHint(null);
     setStepTitle(null);
     setDone(false);
+    setCurrentStep(null);
+    setLastQuickCheck(null);
   };
 
   const initializeDialogue = async (session: string, plan: string) => {
@@ -141,7 +147,19 @@ export function ChatPane({ className }: { className?: string }) {
     addMessage(studentMessage);
     setInput("");
     startStreaming();
-    sendTurn(trimmed, sessionId, planId);
+    const quickCheckConfig = extractQuickCheckConfig(currentStep ?? null);
+    const quickCheck = quickCheckConfig ? runQuickChecks(trimmed, quickCheckConfig) : null;
+    if (quickCheck) {
+      setLastQuickCheck(quickCheck);
+      if (quickCheck.outcome === "pass") {
+        showToast({ variant: "success", title: quickCheck.message ?? "Looks good." });
+      } else if (quickCheck.outcome === "fail") {
+        showToast({ variant: "warning", title: quickCheck.message ?? "Let’s tweak that answer." });
+      }
+    } else {
+      setLastQuickCheck(null);
+    }
+    sendTurn(trimmed, sessionId, planId, quickCheck ?? undefined);
   };
 
   const handleStop = () => {
@@ -189,7 +207,12 @@ export function ChatPane({ className }: { className?: string }) {
     }
   };
 
-  const sendTurn = async (content: string, session: string, plan: string) => {
+  const sendTurn = async (
+    content: string,
+    session: string,
+    plan: string,
+    quickCheck?: QuickCheckResult,
+  ) => {
     const feedback: StudentTurnFeedback = {
       outcome: determineOutcome(content),
       content,
@@ -199,7 +222,13 @@ export function ChatPane({ className }: { className?: string }) {
       const response = await fetch("/api/meno", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session, planId: plan, studentTurn: feedback, transcript: buildTranscript() }),
+        body: JSON.stringify({
+          sessionId: session,
+          planId: plan,
+          studentTurn: feedback,
+          transcript: buildTranscript(),
+          quickCheck,
+        }),
       });
 
       if (!response.ok) {
@@ -229,6 +258,7 @@ export function ChatPane({ className }: { className?: string }) {
     if (data.step?.title) {
       setStepTitle(data.step.title);
     }
+    setCurrentStep(data.step);
 
     if (data.done && data.recap) {
       const recapMessage = createChatMessage(
@@ -366,6 +396,21 @@ export function ChatPane({ className }: { className?: string }) {
       {hint ? (
         <div className="border-t border-[var(--border)] bg-[var(--card)]/60 px-6 py-3 font-sans text-xs text-[var(--accent)]">
           Hint: {hint}
+        </div>
+      ) : null}
+
+      {lastQuickCheck ? (
+        <div
+          className={cn(
+            "border-t border-[var(--border)] px-6 py-3 font-sans text-xs",
+            lastQuickCheck.outcome === "pass"
+              ? "text-emerald-600 bg-emerald-500/10"
+              : lastQuickCheck.outcome === "fail"
+              ? "text-[#b94a44] bg-[#b94a44]/10"
+              : "text-[var(--muted)] bg-[var(--card)]/60",
+          )}
+        >
+          Quick check: {lastQuickCheck.message ?? lastQuickCheck.code}
         </div>
       ) : null}
 

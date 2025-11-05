@@ -2,6 +2,7 @@ import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 
 import { env } from "@/env";
 import { getDocumentClient } from "@/lib/aws/dynamo";
+import type { QuickCheckResult } from "@/lib/dialogue/types";
 
 export interface DialogueState {
   sessionId: string;
@@ -14,6 +15,7 @@ export interface DialogueState {
   lastStudentTurnAt?: string;
   updatedAt: string;
   recapIssued?: boolean;
+  quickChecks: QuickCheckResult[];
 }
 
 const tableName = env.DIALOGUE_TABLE_NAME;
@@ -41,6 +43,9 @@ export const getDialogueState = async (sessionId: string): Promise<DialogueState
   }
   if (typeof state.recapIssued !== "boolean") {
     state.recapIssued = false;
+  }
+  if (!Array.isArray(state.quickChecks)) {
+    state.quickChecks = [];
   }
 
   return state;
@@ -73,5 +78,6 @@ export const createInitialState = (sessionId: string, planId: string): DialogueS
   lastPromptAt: new Date().toISOString(),
   lastStudentTurnAt: undefined,
   recapIssued: false,
+  quickChecks: [],
 });
 

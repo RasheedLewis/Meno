@@ -22,5 +22,15 @@ export interface DialogueTurnRequest {
   advance?: boolean;
   studentTurn?: StudentTurnFeedback;
   transcript?: DialogueContextTurn[];
+  quickCheck?: QuickCheckResult;
+}
+
+export type QuickCheckOutcome = "pass" | "fail" | "inconclusive";
+
+export interface QuickCheckResult {
+  outcome: QuickCheckOutcome;
+  code: string;
+  message?: string;
+  severity?: "info" | "warning" | "error";
 }
 

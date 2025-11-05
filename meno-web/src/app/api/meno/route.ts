@@ -104,6 +104,10 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
 
+    if (payload.quickCheck) {
+      state.quickChecks = [...state.quickChecks, payload.quickCheck].slice(-10);
+    }
+
     state.updatedAt = new Date().toISOString();
 
     await upsertDialogueState(state);
@@ -166,6 +170,9 @@ export async function POST(request: Request): Promise<Response> {
 
     if (done) {
       state.recapIssued = true;
+      await upsertDialogueState(state);
+    } else {
+      state.updatedAt = new Date().toISOString();
       await upsertDialogueState(state);
     }
 
