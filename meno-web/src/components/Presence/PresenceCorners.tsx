@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import { PresenceSeat } from "@/components/Presence/PresenceSeat";
 import { cn } from "@/components/ui/cn";
-import { usePresenceStore } from "@/lib/store/presence";
+import { usePresenceStore, type PresenceState } from "@/lib/store/presence";
 import { useSessionStore } from "@/lib/store/session";
 
 const cornerPositions: Record<string, string> = {
@@ -38,7 +38,7 @@ interface SeatData {
   isLocal?: boolean;
 }
 
-const toSeatState = (record: ReturnType<typeof usePresenceStore>["participants"][number]): SeatData => {
+const toSeatState = (record: PresenceState["participants"][number]): SeatData => {
   let derivedState: SeatData["state"] = "idle";
   if (record.status === "disconnected") {
     derivedState = "disconnected";

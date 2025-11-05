@@ -4,7 +4,7 @@ import type { PresenceBroadcast, PresenceRecord } from "@/lib/presence/types";
 
 export type PresenceConnectionState = "idle" | "connecting" | "open" | "error" | "closed";
 
-interface PresenceState {
+export interface PresenceState {
     participants: PresenceRecord[];
     typingSummary: PresenceBroadcast["typingSummary"];
     typingIds: string[];
