@@ -212,7 +212,7 @@ export function ChatPane({ className }: { className?: string }) {
       if (quickCheck.outcome === "pass") {
         showToast({ variant: "success", title: quickCheck.message ?? "Looks good." });
       } else if (quickCheck.outcome === "fail") {
-        showToast({ variant: "warning", title: quickCheck.message ?? "Let’s tweak that answer." });
+        showToast({ variant: "error", title: quickCheck.message ?? "Let’s tweak that answer." });
       }
     } else {
       setLastQuickCheck(null);
@@ -458,7 +458,7 @@ export function ChatPane({ className }: { className?: string }) {
       if (payload?.ok) {
         setHeavyResult(payload.data);
       } else {
-        showToast({ variant: "warning", title: payload?.error ?? "Validation failed" });
+      showToast({ variant: "error", title: payload?.error ?? "Validation failed" });
         setHeavyResult(null);
       }
     } catch (error) {
