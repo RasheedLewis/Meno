@@ -5,6 +5,7 @@ import { RichMathText } from "@/components/Math/RichMathText";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import type { ProblemMeta } from "@/lib/types/problem";
+import type { ReactElement } from "react";
 import { showToast } from "@/components/ui/Toast";
 
 interface ProblemHeaderProps {
@@ -301,7 +302,7 @@ const BadgeList = ({
   </div>
 );
 
-type IconComponent = (props: SVGProps<SVGSVGElement>) => JSX.Element;
+type IconComponent = (props: SVGProps<SVGSVGElement>) => ReactElement;
 
 const ContextBadge = ({ icon: Icon, label }: { icon: IconComponent; label: string }) => (
   <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--paper)] px-3 py-1 text-xs font-medium text-[var(--muted)]">
