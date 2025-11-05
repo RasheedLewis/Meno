@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { listPresence } from "@/lib/presence/store";
@@ -7,10 +8,10 @@ interface Params {
 }
 
 export async function GET(
-  _request: Request,
-  { params }: { params: Params },
+  _request: NextRequest,
+  context: { params: Promise<Params> },
 ): Promise<Response> {
-  const { sessionId } = params;
+  const { sessionId } = await context.params;
 
   if (!sessionId) {
     return NextResponse.json({ ok: false, error: "sessionId is required" }, { status: 400 });
