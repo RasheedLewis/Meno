@@ -23,6 +23,7 @@ import {
   type QuickCheckConfig,
 } from "@/lib/validate/client";
 import type { QuickCheckResult } from "@/lib/dialogue/types";
+import type { HspStep } from "@/lib/hsp/schema";
 
 import { MessageBubble } from "./Message";
 
@@ -34,7 +35,7 @@ const buildStatus = (isStreaming: boolean, isInitializing: boolean) => {
 };
 
 interface DialogueResponse {
-  step: { title: string; prompt: string } | null;
+  step: HspStep | null;
   promptTemplate: string | null;
   stepIndex: number;
   totalSteps: number;
