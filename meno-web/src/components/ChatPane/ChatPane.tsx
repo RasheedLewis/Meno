@@ -118,7 +118,7 @@ export function ChatPane({ className }: { className?: string }) {
 
     presenceClient.connect({
       sessionId,
-      participantId,
+      participantId: participantId ?? undefined,
       name: participantName,
       role: participantRole,
     });
