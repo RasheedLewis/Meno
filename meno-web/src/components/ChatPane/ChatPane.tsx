@@ -118,7 +118,7 @@ export function ChatPane({ className }: { className?: string }) {
     }
 
     presenceClient.connect({
-      sessionId,
+      sessionId: sessionId ?? undefined,
       participantId: participantId ?? undefined,
       name: participantName,
       role: participantRole,
@@ -365,7 +365,7 @@ export function ChatPane({ className }: { className?: string }) {
       source: "chat",
       channel: "public",
       tags: ["prompt"],
-      sessionId,
+      sessionId: sessionId ?? undefined,
       payload: {
         senderName: "Meno",
       },
@@ -487,7 +487,7 @@ export function ChatPane({ className }: { className?: string }) {
         <div className="flex items-center gap-3">
           <PresenceBar />
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={handleAdvanceStep}
             disabled={!planId || isStreaming || isInitializing || done}
