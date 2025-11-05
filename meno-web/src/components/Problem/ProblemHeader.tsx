@@ -330,8 +330,6 @@ const formatDomain = (domain: ProblemDomain) => {
   }
 };
 
-type ProblemDifficulty = NonNullable<ProblemMeta["context"]>["difficulty"];
-
 const resolveDifficulty = (
   difficulty?: ProblemDifficulty,
 ) => {
