@@ -109,7 +109,10 @@ export default function ChatDemoPage() {
 const planToProblemMeta = (plan: HspPlan, fallback: ProblemMeta): ProblemMeta => {
   const canonical = typeof plan.meta?.canonicalText === "string" ? plan.meta.canonicalText : undefined;
   const difficulty = fallback.context?.difficulty;
-  const domain = (plan.meta?.domain as ProblemMeta["context"]["domain"] | undefined) ?? fallback.context?.domain ?? "math";
+  const rawDomain = plan.meta?.domain;
+  const domain = isProblemDomain(rawDomain)
+    ? rawDomain
+    : fallback.context?.domain ?? "math";
   const derivedTitle = deriveTitle(plan) ?? fallback.title;
   const description = plan.summary ?? fallback.description;
   const goal = plan.goal || fallback.goal;
@@ -160,6 +163,9 @@ const planToProblemMeta = (plan: HspPlan, fallback: ProblemMeta): ProblemMeta =>
     },
   };
 };
+
+const isProblemDomain = (value: unknown): value is ProblemMeta["context"]["domain"] =>
+  typeof value === "string" && ["philosophy", "math", "logic", "language", "custom"].includes(value);
 
 const deriveTitle = (plan: HspPlan) => {
   const meta = plan.meta ?? {};
