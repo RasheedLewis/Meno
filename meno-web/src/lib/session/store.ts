@@ -19,6 +19,7 @@ export interface SessionRecord {
   creatorParticipantId: string;
   createdAt: string;
   expiresAt?: number;
+  maxParticipants?: number;
   participants: Array<{
     id: string;
     name: string;
@@ -28,6 +29,8 @@ export interface SessionRecord {
 }
 
 const TTL_SECONDS = 60 * 60 * 6; // 6 hours
+
+export const DEFAULT_MAX_PARTICIPANTS = 4;
 
 const computeExpiry = () => Math.floor(Date.now() / 1000) + TTL_SECONDS;
 
@@ -40,6 +43,7 @@ export const createSession = async (record: SessionRecord): Promise<void> => {
       Item: {
         ...record,
         expiresAt: computeExpiry(),
+        maxParticipants: record.maxParticipants ?? DEFAULT_MAX_PARTICIPANTS,
       },
       ConditionExpression: "attribute_not_exists(sessionId)",
     }),
@@ -81,19 +85,44 @@ export const getSessionByCode = async (code: string): Promise<SessionRecord | nu
 export const addParticipantToSession = async (
   sessionId: string,
   participant: SessionRecord["participants"][number],
-): Promise<void> => {
-  if (!tableName) return;
+): Promise<SessionRecord | null> => {
+  if (!tableName) return null;
+
+  const current = await getSessionById(sessionId);
+  if (!current) {
+    return null;
+  }
+
+  const participants = [...(current.participants ?? [])];
+  const existingIndex = participants.findIndex((item) => item.id === participant.id);
+
+  if (existingIndex >= 0) {
+    participants[existingIndex] = {
+      ...participants[existingIndex],
+      name: participant.name,
+      role: participant.role,
+    };
+  } else {
+    participants.push(participant);
+  }
+
+  const expiresAt = computeExpiry();
 
   await client.send(
     new UpdateCommand({
       TableName: tableName,
       Key: { sessionId },
-      UpdateExpression: "SET participants = list_append(if_not_exists(participants, :empty), :participant), expiresAt = :expiresAt",
+      UpdateExpression: "SET participants = :participants, expiresAt = :expiresAt",
       ExpressionAttributeValues: {
-        ":participant": [participant],
-        ":empty": [],
-        ":expiresAt": computeExpiry(),
+        ":participants": participants,
+        ":expiresAt": expiresAt,
       },
     }),
   );
+
+  return {
+    ...current,
+    participants,
+    expiresAt,
+  };
 };
