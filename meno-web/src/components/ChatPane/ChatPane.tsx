@@ -190,7 +190,7 @@ export function ChatPane({ className }: { className?: string }) {
       source: "chat",
       channel: "public",
       sessionId,
-      participantId,
+      participantId: participantId ?? undefined,
       payload: {
         senderName: participantName,
       },
