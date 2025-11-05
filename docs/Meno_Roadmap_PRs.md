@@ -143,6 +143,9 @@ Paths assume a Next.js + TypeScript web app using the `/app` directory and `page
 **Goal:** Multi-student chat and presence via Supabase Realtime (or WS).
 
 **Subtasks**
+- [ ] Session registry backend (DynamoDB table + env wiring).
+- [ ] Session create/join API (persist codes, participants, expiry).
+- [ ] Client join flow integration (validate codes, hydrate session store).
 - [ ] Presence (who’s online, typing).
 - [ ] Chat streams (pub/sub room per session).
 - [ ] Turn metadata broadcast (who Meno is addressing).

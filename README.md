@@ -43,6 +43,8 @@ See `meno-web/.env.example` for API keys and service configuration. Key variable
 - `HSP_TABLE_NAME`
 - `DIALOGUE_TABLE_NAME`
 - `PRESENCE_TABLE_NAME`
+- `CHAT_TABLE_NAME`
+- `SESSION_TABLE_NAME`
 - `SYMPY_SERVICE_URL`
 - `NEXT_PUBLIC_APP_URL`
 - `

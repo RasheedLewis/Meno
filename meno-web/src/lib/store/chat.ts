@@ -59,6 +59,7 @@ interface ChatState {
   messages: ChatTranscript;
   isStreaming: boolean;
   addMessage: (message: ChatMessage) => void;
+  addMessages: (messages: ChatTranscript) => void;
   updateMessage: (id: string, updater: Partial<ChatMessage>) => void;
   setMessages: (messages: ChatTranscript) => void;
   clearMessages: () => void;
@@ -70,7 +71,32 @@ export const useChatStore = create<ChatState>((set) => ({
   messages: seedTranscript,
   isStreaming: false,
   addMessage: (message) =>
-    set((state) => ({ messages: [...state.messages, message] })),
+    set((state) => {
+      const exists = state.messages.some((existing) => existing.id === message.id);
+      if (exists) {
+        return {
+          messages: state.messages.map((existing) =>
+            existing.id === message.id ? { ...existing, ...message } : existing,
+          ),
+        };
+      }
+      return { messages: [...state.messages, message] };
+    }),
+  addMessages: (messages) =>
+    set((state) => {
+      const merged = [...state.messages];
+      messages.forEach((message) => {
+        const index = merged.findIndex((existing) => existing.id === message.id);
+        if (index >= 0) {
+          merged[index] = { ...merged[index], ...message };
+        } else {
+          merged.push(message);
+        }
+      });
+      return {
+        messages: merged.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+      };
+    }),
   updateMessage: (id, updater) =>
     set((state) => ({
       messages: state.messages.map((message) =>

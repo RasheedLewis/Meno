@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { PresenceBar } from "@/components/Presence/PresenceBar";
 import { Button } from "@/components/ui/Button";
+import { PresenceBar } from "@/components/Presence/PresenceBar";
 import { showToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
+import { chatClient } from "@/lib/chat/client";
 import { presenceClient } from "@/lib/presence/client";
 import { createChatMessage, useChatStore } from "@/lib/store/chat";
 import { useSessionStore } from "@/lib/store/session";
@@ -111,6 +112,7 @@ export function ChatPane({ className }: { className?: string }) {
   useEffect(() => {
     if (!sessionId || !participantId || !participantName) {
       presenceClient.disconnect();
+      chatClient.disconnect();
       return;
     }
 
@@ -120,9 +122,16 @@ export function ChatPane({ className }: { className?: string }) {
       name: participantName,
       role: participantRole,
     });
+    chatClient.connect({
+      sessionId,
+      participantId,
+      name: participantName,
+      role: participantRole,
+    });
 
     return () => {
       presenceClient.disconnect();
+      chatClient.disconnect();
       if (typingTimerRef.current) {
         clearTimeout(typingTimerRef.current);
         typingTimerRef.current = null;
@@ -180,6 +189,11 @@ export function ChatPane({ className }: { className?: string }) {
     const studentMessage = createChatMessage("student", trimmed, {
       source: "chat",
       channel: "public",
+      sessionId,
+      participantId,
+      payload: {
+        senderName: participantName,
+      },
     });
 
     addMessage(studentMessage);
@@ -207,6 +221,12 @@ export function ChatPane({ className }: { className?: string }) {
     } else {
       setHeavyResult(null);
     }
+    chatClient.sendMessage({
+      id: studentMessage.id,
+      content: studentMessage.content,
+      role: studentMessage.role,
+      meta: studentMessage.meta,
+    });
     sendTurn(trimmed, sessionId, planId, quickCheck ?? undefined);
   };
 
@@ -340,20 +360,26 @@ export function ChatPane({ className }: { className?: string }) {
       return;
     }
 
-    const menoMessage = createChatMessage(
-      "meno",
-      buildMenoPrompt(data.promptTemplate),
-      {
-        source: "chat",
-        channel: "public",
-        tags: ["prompt"],
+    const menoMessage = createChatMessage("meno", buildMenoPrompt(data.promptTemplate), {
+      source: "chat",
+      channel: "public",
+      tags: ["prompt"],
+      sessionId,
+      payload: {
+        senderName: "Meno",
       },
-    );
+    });
 
     if (options?.replace) {
       clearMessages();
     }
     addMessage(menoMessage);
+    chatClient.sendMessage({
+      id: menoMessage.id,
+      content: menoMessage.content,
+      role: menoMessage.role,
+      meta: menoMessage.meta,
+    });
   };
 
   const determineOutcome = (content: string): StudentTurnFeedback["outcome"] => {

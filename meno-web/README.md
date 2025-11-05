@@ -33,6 +33,8 @@ Environment variables are validated at runtime by `src/env.ts`. Missing or malfo
 | `HSP_TABLE_NAME` | Server | DynamoDB table for hidden solution plans |
 | `DIALOGUE_TABLE_NAME` | Server | DynamoDB table for dialogue state & step progress |
 | `PRESENCE_TABLE_NAME` | Server | DynamoDB table for presence + typing indicators |
+| `CHAT_TABLE_NAME` | Server | DynamoDB table for chat transcripts |
+| `SESSION_TABLE_NAME` | Server | DynamoDB table for session registry |
 | `SYMPY_SERVICE_URL` | Server | URL for the SymPy validation microservice |
 | `NEXT_PUBLIC_APP_URL` | Client | Base URL used for links and share targets |
 | `NEXT_PUBLIC_SUPABASE_URL` | Client | Supabase project URL for realtime/presence |

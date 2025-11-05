@@ -14,6 +14,8 @@ const serverSchema = z.object({
     HSP_TABLE_NAME: z.string().optional(),
     DIALOGUE_TABLE_NAME: z.string().optional(),
     PRESENCE_TABLE_NAME: z.string().optional(),
+    CHAT_TABLE_NAME: z.string().optional(),
+    SESSION_TABLE_NAME: z.string().optional(),
     SYMPY_SERVICE_URL: z.string().url().optional(),
 });
 
