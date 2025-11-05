@@ -20,11 +20,12 @@ export function KaTeXBlock({
   errorColor = "#b94a44",
   className,
 }: KaTeXBlockProps) {
-  const spanRef = useRef<HTMLSpanElement | HTMLDivElement>(null);
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const blockRef = useRef<HTMLDivElement>(null);
   const isInline = inline ?? !displayMode;
 
   useEffect(() => {
-    const element = spanRef.current;
+    const element = isInline ? spanRef.current : blockRef.current;
     if (!element) return;
 
     try {
@@ -39,9 +40,11 @@ export function KaTeXBlock({
     }
   }, [expression, errorColor, isInline]);
 
-  const Element = isInline ? "span" : "div";
+  if (isInline) {
+    return <span ref={spanRef} className={className} suppressHydrationWarning />;
+  }
 
-  return <Element ref={spanRef} className={className} suppressHydrationWarning />;
+  return <div ref={blockRef} className={className} suppressHydrationWarning />;
 }
 
 const escapeHtml = (value: string) =>
