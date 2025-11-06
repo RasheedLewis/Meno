@@ -76,6 +76,16 @@ const createServer = (server: HTTPServer): ChatServer => {
   };
 
   wss.on("connection", async (socket: ChatConnection, request) => {
+    console.log("[chat] connection open", request.url);
+
+    socket.on("close", (code, reason) => {
+      const text = Buffer.isBuffer(reason) ? reason.toString("utf8") : String(reason ?? "");
+      console.log("[chat] connection closed", { code, reason: text });
+    });
+
+    socket.on("error", (error) => {
+      console.error("[chat] connection error", error);
+    });
     const url = new URL(request.url ?? "", "http://localhost");
     const sessionId = url.searchParams.get("sessionId") ?? "";
     const participantId = url.searchParams.get("participantId") ?? "";
@@ -154,11 +164,13 @@ const createServer = (server: HTTPServer): ChatServer => {
   });
 
   server.on("upgrade", (request, socket, head) => {
+    console.log("[chat] upgrade request", request.url);
     if (!request.url?.startsWith("/api/chat")) {
       return;
     }
 
     wss.handleUpgrade(request, socket as never, head, (ws) => {
+      console.log("[chat] upgrade accepted", request.url);
       wss.emit("connection", ws, request);
     });
   });
