@@ -165,12 +165,12 @@ Paths assume a Next.js + TypeScript web app using the `/app` directory and `page
 
 **Subtasks**
 - [ ] Add tldraw canvas with minimal toolset (pen, eraser, shapes, color picker).
+- [x] Split chat/whiteboard layout on `/chat` page.
 - [ ] Share identity colors/cursors with presence participants.
 - [ ] Stand up y-websocket service (dev + prod) and wire client URL env.
-- [ ] Persist whiteboard document per session (DynamoDB snapshot + load).
 - [ ] Sync scene via Yjs provider (auto-save + reconnection).
+- [ ] Persist whiteboard document per session (DynamoDB snapshot + load).
 - [ ] Export full-scene PNG download.
-- [ ] Split chat/whiteboard layout on `/chat` page.
 
 **Files**
 - (A) `components/Whiteboard/Whiteboard.tsx`
