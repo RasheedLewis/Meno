@@ -12,8 +12,8 @@ type WhiteboardProps = {
 
 export function Whiteboard({ className }: WhiteboardProps) {
   return (
-    <div className={cn("pointer-events-auto", className)}>
-      <Tldraw autoFocus inferDarkMode style={{ width: "100vw", height: "100vh" }} />
+    <div className={cn("pointer-events-auto h-full w-full", className)}>
+      <Tldraw autoFocus inferDarkMode />
     </div>
   );
 }
