@@ -172,7 +172,13 @@ export const config = {
 };
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  const server = res.socket.server as HTTPServer & {
+  if (!res.socket) {
+    res.status(500).json({ ok: false, error: "Socket unavailable" });
+    return;
+  }
+
+  const serverSocket = res.socket as NextApiResponse["socket"] & { server: HTTPServer };
+  const server = serverSocket.server as HTTPServer & {
     __menoPresence?: {
       wss: WebSocketServer;
       connections: ConnectionsMap;
