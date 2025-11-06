@@ -65,7 +65,7 @@ const normalizeRules = (rules: unknown[]): QuickCheckRule[] =>
               pattern: typed.pattern,
               flags: typeof typed.flags === "string" ? typed.flags : undefined,
               message: typed.message,
-            };
+            } satisfies QuickCheckRule;
           }
           break;
         case "numeric":
@@ -78,18 +78,21 @@ const normalizeRules = (rules: unknown[]): QuickCheckRule[] =>
                   ? Math.abs(typed.tolerance)
                   : 1e-4,
               message: typed.message,
-            };
+            } satisfies QuickCheckRule;
           }
           break;
         case "unit":
           if (Array.isArray(typed.units)) {
-            return {
-              type: "unit" as const,
-              units: typed.units
-                .filter((unit) => typeof unit === "string" && unit.trim().length > 0)
-                .map((unit) => unit.trim()),
-              message: typed.message,
-            };
+            const cleanedUnits = typed.units
+              .filter((unit) => typeof unit === "string" && unit.trim().length > 0)
+              .map((unit) => unit.trim());
+            if (cleanedUnits.length > 0) {
+              return {
+                type: "unit" as const,
+                units: cleanedUnits,
+                message: typed.message,
+              } satisfies QuickCheckRule;
+            }
           }
           break;
         default:
@@ -97,7 +100,7 @@ const normalizeRules = (rules: unknown[]): QuickCheckRule[] =>
       }
       return null;
     })
-    .filter((rule): rule is QuickCheckRule => Boolean(rule));
+    .filter((rule): rule is QuickCheckRule => rule !== null);
 
 export const runQuickChecks = (
   answer: string,
