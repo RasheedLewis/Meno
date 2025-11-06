@@ -53,24 +53,26 @@ export const extractQuickCheckConfig = (step: HspStep | null): QuickCheckConfig 
 };
 
 const normalizeRules = (rules: unknown[]): QuickCheckRule[] =>
-  rules
-    .map((rule) => {
-      if (!rule || typeof rule !== "object") return null;
-      const typed = rule as Partial<QuickCheckRule & { type: string }>;
-      switch (typed.type) {
-        case "regex":
-          if (typeof typed.pattern === "string") {
-            return {
+  rules.flatMap((rule) => {
+    if (!rule || typeof rule !== "object") return [];
+    const typed = rule as Partial<QuickCheckRule & { type: string }>;
+    switch (typed.type) {
+      case "regex":
+        if (typeof typed.pattern === "string") {
+          return [
+            {
               type: "regex" as const,
               pattern: typed.pattern,
               flags: typeof typed.flags === "string" ? typed.flags : undefined,
               message: typed.message,
-            } satisfies QuickCheckRule;
-          }
-          break;
-        case "numeric":
-          if (typeof typed.expected === "number") {
-            return {
+            } satisfies QuickCheckRule,
+          ];
+        }
+        break;
+      case "numeric":
+        if (typeof typed.expected === "number") {
+          return [
+            {
               type: "numeric" as const,
               expected: typed.expected,
               tolerance:
@@ -78,29 +80,31 @@ const normalizeRules = (rules: unknown[]): QuickCheckRule[] =>
                   ? Math.abs(typed.tolerance)
                   : 1e-4,
               message: typed.message,
-            } satisfies QuickCheckRule;
-          }
-          break;
-        case "unit":
-          if (Array.isArray(typed.units)) {
-            const cleanedUnits = typed.units
-              .filter((unit) => typeof unit === "string" && unit.trim().length > 0)
-              .map((unit) => unit.trim());
-            if (cleanedUnits.length > 0) {
-              return {
+            } satisfies QuickCheckRule,
+          ];
+        }
+        break;
+      case "unit":
+        if (Array.isArray(typed.units)) {
+          const cleanedUnits = typed.units
+            .filter((unit) => typeof unit === "string" && unit.trim().length > 0)
+            .map((unit) => unit.trim());
+          if (cleanedUnits.length > 0) {
+            return [
+              {
                 type: "unit" as const,
                 units: cleanedUnits,
                 message: typed.message,
-              } satisfies QuickCheckRule;
-            }
+              } satisfies QuickCheckRule,
+            ];
           }
-          break;
-        default:
-          break;
-      }
-      return null;
-    })
-    .filter((rule): rule is QuickCheckRule => rule !== null);
+        }
+        break;
+      default:
+        break;
+    }
+    return [];
+  });
 
 export const runQuickChecks = (
   answer: string,
