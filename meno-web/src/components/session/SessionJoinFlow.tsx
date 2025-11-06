@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { showToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
-import { useSessionStore, type Participant, type SessionDifficulty } from "@/lib/store/session";
+import { useSessionStore, type Participant, type SessionDifficulty, type ParticipantRole } from "@/lib/store/session";
 import { normalizeSessionCode } from "@/lib/session/code";
 import { useUiStore } from "@/lib/store/ui";
 
