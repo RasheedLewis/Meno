@@ -16,6 +16,7 @@ export interface Participant {
 
 interface SessionState {
   sessionId: string | null;
+  sessionCode: string | null;
   sessionName: string | null;
   participantId: string | null;
   participantName: string;
@@ -28,6 +29,7 @@ interface SessionState {
   isLoading: boolean;
   error: string | null;
   setSessionId: (sessionId: string | null) => void;
+  setSessionCode: (sessionCode: string | null) => void;
   setParticipant: (payload: {
     id: string;
     name: string;
@@ -46,6 +48,7 @@ interface SessionState {
   setError: (message: string | null) => void;
   hydrateFromServer: (payload: {
     sessionId: string;
+    code?: string | null;
     sessionName?: string | null;
     difficulty?: SessionDifficulty | null;
     participants?: Participant[];
@@ -55,6 +58,7 @@ interface SessionState {
 
 type SessionBaseState = {
   sessionId: string | null;
+  sessionCode: string | null;
   sessionName: string | null;
   participantId: string | null;
   participantName: string;
@@ -70,6 +74,7 @@ type SessionBaseState = {
 
 const baseSession: SessionBaseState = {
   sessionId: null,
+  sessionCode: null,
   sessionName: null,
   participantId: null,
   participantName: "",
@@ -88,6 +93,7 @@ export const useSessionStore = create<SessionState>()(
     (set) => ({
       ...baseSession,
       setSessionId: (sessionId) => set({ sessionId }),
+      setSessionCode: (sessionCode) => set({ sessionCode }),
       setParticipant: ({ id, name, role }) =>
         set((state) => ({
           participantId: id,
@@ -123,9 +129,10 @@ export const useSessionStore = create<SessionState>()(
         }),
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
-      hydrateFromServer: ({ sessionId, sessionName, difficulty, participants }) =>
+      hydrateFromServer: ({ sessionId, code, sessionName, difficulty, participants }) =>
         set((state) => ({
           sessionId,
+          sessionCode: code ?? state.sessionCode,
           sessionName: sessionName ?? state.sessionName,
           difficulty: difficulty ?? state.difficulty,
           participants: participants ?? state.participants,
@@ -137,6 +144,7 @@ export const useSessionStore = create<SessionState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         sessionId: state.sessionId,
+        sessionCode: state.sessionCode,
         sessionName: state.sessionName,
         participantId: state.participantId,
         participantName: state.participantName,

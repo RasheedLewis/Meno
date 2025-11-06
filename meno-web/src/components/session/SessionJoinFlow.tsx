@@ -54,6 +54,7 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
   const role = useSessionStore((state) => state.role);
   const setParticipant = useSessionStore((state) => state.setParticipant);
   const setSessionId = useSessionStore((state) => state.setSessionId);
+  const setSessionCode = useSessionStore((state) => state.setSessionCode);
   const setSessionMeta = useSessionStore((state) => state.setSessionMeta);
   const setPhase = useSessionStore((state) => state.setPhase);
   const participants = useSessionStore((state) => state.participants);
@@ -200,10 +201,12 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
 
       const sessionId = payload.data.sessionId;
       setSessionId(sessionId);
+      setSessionCode(payload.data.code);
       setParticipant({ id: participantId, name: payload.data.participant.name, role: payload.data.participant.role });
       setNameInput(payload.data.participant.name);
       hydrateSession({
         sessionId,
+        code: payload.data.code,
         sessionName: payload.data.name,
         difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? null,
         participants: [
@@ -286,11 +289,14 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
         throw new Error(payload.ok ? "Failed to join session" : payload.error);
       }
 
-      setSessionId(payload.data.sessionId);
+      const sessionId = payload.data.sessionId;
+      setSessionId(sessionId);
+      setSessionCode(payload.data.code ?? null);
       setParticipant({ id: participantId, name: nameResult.value, role });
       setNameInput(nameResult.value);
       hydrateSession({
-        sessionId: payload.data.sessionId,
+        sessionId,
+        code: payload.data.code,
         sessionName: payload.data.name,
         difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? null,
         participants: payload.data.participants.map((participant) => ({
