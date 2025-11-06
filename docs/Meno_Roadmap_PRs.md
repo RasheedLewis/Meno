@@ -164,16 +164,22 @@ Paths assume a Next.js + TypeScript web app using the `/app` directory and `page
 **Goal:** Shared canvas with drawing tools; CRDT-based sync.
 
 **Subtasks**
-- [ ] Add tldraw canvas with pen/eraser/shapes/color.
-- [ ] Sync scene with Yjs provider.
-- [ ] Identity color per student and cursors.
-- [ ] Export to PNG/PDF.
+- [ ] Add tldraw canvas with minimal toolset (pen, eraser, shapes, color picker).
+- [ ] Share identity colors/cursors with presence participants.
+- [ ] Stand up y-websocket service (dev + prod) and wire client URL env.
+- [ ] Persist whiteboard document per session (DynamoDB snapshot + load).
+- [ ] Sync scene via Yjs provider (auto-save + reconnection).
+- [ ] Export full-scene PNG download.
+- [ ] Split chat/whiteboard layout on `/chat` page.
 
 **Files**
 - (A) `components/Whiteboard/Whiteboard.tsx`
 - (A) `lib/whiteboard/yjsProvider.ts`
 - (A) `lib/whiteboard/tools.ts`
+- (A) `services/whiteboard/server.ts` (y-websocket host)
+- (A) `lib/whiteboard/persistence.ts`
 - (M) `app/page.tsx` — layout split (chat + board)
+- (M) `src/env.ts` — whiteboard env vars
 
 ---
 
