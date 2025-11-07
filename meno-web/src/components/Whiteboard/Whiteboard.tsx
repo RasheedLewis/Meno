@@ -1,12 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from "react";
 
 import { cn } from "@/components/ui/cn";
+import { showToast } from "@/components/ui/Toast";
 
 import {
   Tldraw,
   type TLUiOverrides,
+  exportToBlob,
 } from "@tldraw/tldraw";
 
 import "@tldraw/tldraw/tldraw.css";
@@ -19,7 +28,14 @@ type WhiteboardProps = {
   className?: string;
 };
 
-export function Whiteboard({ className }: WhiteboardProps) {
+export interface WhiteboardHandle {
+  exportAsPng: () => Promise<void>;
+}
+
+export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function Whiteboard(
+  { className }: WhiteboardProps,
+  ref,
+) {
   const editorRef = useRef<import("@tldraw/tldraw").Editor | null>(null);
 
   const presenceParticipants = usePresenceStore((state) => state.participants);
@@ -54,6 +70,65 @@ export function Whiteboard({ className }: WhiteboardProps) {
       editorRef.current.user.updateUserPreferences({ color: localColor });
     }
   }, [localColor]);
+
+  const exportAsPng = useCallback(async () => {
+    const editor = editorRef.current;
+    if (!editor) {
+      const message = "Whiteboard is still initializing.";
+      showToast({ variant: "error", title: "Export failed", description: message });
+      throw new Error(message);
+    }
+
+    try {
+      const ids = Array.from(editor.getCurrentPageShapeIds());
+      const blob = await exportToBlob({
+        editor,
+        ids,
+        format: "png",
+        opts: {
+          background: editor.getInstanceState().exportBackground ?? true,
+        },
+      });
+
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")
+        .replace("T", "_")
+        .split("Z")[0];
+      const filename = `meno-whiteboard-${sessionId ?? "session"}-${timestamp}.png`;
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast({
+        variant: "success",
+        title: "Exported PNG",
+        description: "Download complete.",
+      });
+    } catch (error) {
+      console.error("Whiteboard export failed", error);
+      showToast({
+        variant: "error",
+        title: "Export failed",
+        description: "Unable to save the whiteboard right now.",
+      });
+      throw error instanceof Error ? error : new Error("Export failed");
+    }
+  }, [sessionId]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      exportAsPng,
+    }),
+    [exportAsPng],
+  );
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -271,4 +346,4 @@ export function Whiteboard({ className }: WhiteboardProps) {
       />
     </div>
   );
-}
+});

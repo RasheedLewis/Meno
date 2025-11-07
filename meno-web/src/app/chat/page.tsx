@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { ChatPane } from "@/components/ChatPane/ChatPane";
 import { ProblemHeader } from "@/components/Problem/ProblemHeader";
 import { UploadBox } from "@/components/Problem/UploadBox";
-import { Whiteboard } from "@/components/Whiteboard/Whiteboard";
+import { Whiteboard, type WhiteboardHandle } from "@/components/Whiteboard/Whiteboard";
 import { Sheet } from "@/components/ui/Sheet";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import type { ProblemMeta } from "@/lib/types/problem";
@@ -23,6 +23,8 @@ export default function ChatDemoPage() {
   const [problemOpen, setProblemOpen] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const whiteboardRef = useRef<WhiteboardHandle | null>(null);
 
   useEffect(() => {
     const start = Date.now();
@@ -122,9 +124,23 @@ export default function ChatDemoPage() {
     return planToProblemMeta(hspPlan, demoProblem);
   }, [hspPlan, demoProblem]);
 
+  const handleExport = useCallback(async () => {
+    if (isExporting || !whiteboardRef.current) {
+      return;
+    }
+    setIsExporting(true);
+    try {
+      await whiteboardRef.current.exportAsPng();
+    } catch {
+      // errors are handled inside export
+    } finally {
+      setIsExporting(false);
+    }
+  }, [isExporting]);
+
   return (
     <div className="relative flex min-h-screen w-full justify-center bg-[var(--surface)]">
-      <Whiteboard className="fixed inset-0" />
+      <Whiteboard ref={whiteboardRef} className="fixed inset-0" />
 
       <TopBar
         problem={activeProblem}
@@ -141,6 +157,8 @@ export default function ChatDemoPage() {
           });
         }}
         onUpload={() => setUploadOpen(true)}
+        onExport={handleExport}
+        exporting={isExporting}
       />
 
       <ProblemPanel problem={activeProblem} open={problemOpen} onClose={() => setProblemOpen(false)} />
@@ -160,11 +178,22 @@ type TopBarProps = {
   sessionCode: string | null;
   elapsed: string;
   problemOpen: boolean;
+  exporting: boolean;
   onToggleProblem: () => void;
   onUpload: () => void;
+  onExport: () => void;
 };
 
-function TopBar({ problem, sessionCode, elapsed, problemOpen, onToggleProblem, onUpload }: TopBarProps) {
+function TopBar({
+  problem,
+  sessionCode,
+  elapsed,
+  problemOpen,
+  exporting,
+  onToggleProblem,
+  onUpload,
+  onExport,
+}: TopBarProps) {
   return (
     <div className="pointer-events-none fixed left-0 right-0 top-0 z-30 flex justify-center">
       <div className="pointer-events-auto flex w-full max-w-6xl items-center justify-between gap-4 rounded-b-3xl border-b border-[var(--border)] bg-[var(--card)]/95 px-5 py-3 shadow-strong backdrop-blur">
@@ -172,6 +201,7 @@ function TopBar({ problem, sessionCode, elapsed, problemOpen, onToggleProblem, o
         <SessionStatusTile sessionCode={sessionCode} elapsed={elapsed} />
         <div className="flex items-center gap-3">
           <UploadButtonTile onUpload={onUpload} />
+          <ExportButtonTile onExport={onExport} disabled={exporting} />
           <ThemeToggle />
         </div>
       </div>
@@ -219,6 +249,20 @@ function UploadButtonTile({ onUpload }: { onUpload: () => void }) {
       onClick={onUpload}
     >
       Upload Image
+    </Button>
+  );
+}
+
+function ExportButtonTile({ onExport, disabled }: { onExport: () => void; disabled: boolean }) {
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      className="rounded-full px-5"
+      onClick={onExport}
+      disabled={disabled}
+    >
+      {disabled ? "Exporting…" : "Download PNG"}
     </Button>
   );
 }
