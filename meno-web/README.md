@@ -36,9 +36,11 @@ Environment variables are validated at runtime by `src/env.ts`. Missing or malfo
 | `CHAT_TABLE_NAME` | Server | DynamoDB table for chat transcripts |
 | `SESSION_TABLE_NAME` | Server | DynamoDB table for session registry |
 | `SYMPY_SERVICE_URL` | Server | URL for the SymPy validation microservice |
+| `YJS_WEBSOCKET_URL` | Server | Optional; absolute URL for the production Yjs websocket bridge |
 | `NEXT_PUBLIC_APP_URL` | Client | Base URL used for links and share targets |
 | `NEXT_PUBLIC_SUPABASE_URL` | Client | Supabase project URL for realtime/presence |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client | Public anon key for Supabase client |
+| `NEXT_PUBLIC_YJS_WEBSOCKET_URL` | Client | Websocket endpoint the browser should use for whiteboard sync |
 
 > Copy `.env.example` → `.env.local` and update values per environment. Optional variables can remain blank during early development; validation only enforces format when provided.
 > DynamoDB: create the table referenced by `HSP_TABLE_NAME` with a partition key `planId` (string).
@@ -51,6 +53,7 @@ Environment variables are validated at runtime by `src/env.ts`. Missing or malfo
 | `npm run build` | Build for production |
 | `npm run start` | Run the production build |
 | `npm run lint` | ESLint over the codebase |
+| `npm run yjs:dev` | Launch the local Yjs websocket bridge on `ws://localhost:1234/yjs` |
 
 ## Project Structure
 
