@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -60,7 +61,7 @@ export default function UiShowcasePage() {
   };
 
   return (
-    <div className="flex flex-col gap-10">
+    <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-10 px-6 py-12">
       <header className="flex flex-col gap-3">
         <Link
           href="/"
@@ -68,14 +69,15 @@ export default function UiShowcasePage() {
         >
           ← Back to overview
         </Link>
-        <h1 className="text-4xl font-semibold text-[var(--ink)]">
-          UI Primitives Showcase
-        </h1>
-        <p className="max-w-2xl font-sans text-base text-[var(--muted)]">
-          Preview the foundational components that shape Meno’s Socratic interface. Buttons,
-          inputs, cards, and overlays inherit the parchment & slate theme and are ready for
-          feature integrations.
-        </p>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h1 className="text-4xl font-semibold text-[var(--ink)]">UI Primitives Showcase</h1>
+            <p className="mt-2 max-w-2xl font-sans text-base text-[var(--muted)]">
+              Preview the foundational components that shape Meno’s Socratic interface. Buttons, inputs, cards, and overlays inherit the parchment & slate theme and are ready for feature integrations.
+            </p>
+          </div>
+          <ThemeToggle />
+        </div>
       </header>
 
       <section className="grid gap-6 md:grid-cols-2">

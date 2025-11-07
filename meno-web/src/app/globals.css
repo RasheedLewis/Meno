@@ -124,3 +124,23 @@ a:hover {
     animation: none !important;
   }
 }
+
+/* tldraw overrides */
+/* tldraw theme variable overrides */
+.tl-theme__light {
+  --color-panel: var(--card);
+  --color-panel-overlay: color-mix(in srgb, var(--card) 92%, transparent);
+  --color-panel-contrast: var(--paper);
+  --color-text-0: var(--ink);
+  --color-text-1: var(--muted);
+  --color-divider: var(--border);
+}
+
+.tl-theme__dark {
+  --color-panel: var(--card);
+  --color-panel-overlay: color-mix(in srgb, var(--card) 90%, transparent);
+  --color-panel-contrast: var(--paper);
+  --color-text-0: var(--ink);
+  --color-text-1: var(--muted);
+  --color-divider: var(--border);
+}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { SessionJoinFlow } from "@/components/session/SessionJoinFlow";
 
 export default function Home() {
@@ -16,6 +17,7 @@ export default function Home() {
           </p>
         </div>
         <div className="flex items-start gap-4">
+          <ThemeToggle />
           <Link
             href="/chat"
             className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-paper/80 px-4 py-2 font-sans text-sm text-accent transition hover:bg-paper"

@@ -148,15 +148,7 @@ export default function ChatDemoPage() {
         onUpload={() => setUploadOpen(true)}
       />
 
-      <div className="pointer-events-none h-full w-full">
-        <div className="pointer-events-auto pt-[96px]">
-          <ProblemPanel
-            problem={activeProblem}
-            open={problemOpen}
-            onClose={() => setProblemOpen(false)}
-          />
-        </div>
-      </div>
+      <ProblemPanel problem={activeProblem} open={problemOpen} onClose={() => setProblemOpen(false)} />
 
       <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} />
 
@@ -239,12 +231,7 @@ function UploadButtonTile({ onUpload }: { onUpload: () => void }) {
 function ChatToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   return (
     <div className="pointer-events-none fixed bottom-[max(1.25rem,env(safe-area-inset-bottom)+1rem)] left-[max(1.25rem,env(safe-area-inset-left)+1rem)] z-20 flex translate-x-[6.5rem] gap-3">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="pointer-events-auto rounded-2xl bg-[var(--card)]/90 px-4 py-2 shadow-strong backdrop-blur"
-        onClick={onToggle}
-      >
+      <Button variant="secondary" size="sm" onClick={onToggle} className="pointer-events-auto">
         {open ? "Hide Chat" : "Open Chat"}
       </Button>
     </div>
