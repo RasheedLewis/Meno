@@ -17,6 +17,7 @@ const serverSchema = z.object({
     CHAT_TABLE_NAME: z.string().optional(),
     SESSION_TABLE_NAME: z.string().optional(),
     SYMPY_SERVICE_URL: z.string().url().optional(),
+    WHITEBOARD_TABLE_NAME: z.string().optional(),
     YJS_WEBSOCKET_URL: z.string().url().optional(),
 });
 

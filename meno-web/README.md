@@ -35,6 +35,7 @@ Environment variables are validated at runtime by `src/env.ts`. Missing or malfo
 | `PRESENCE_TABLE_NAME` | Server | DynamoDB table for presence + typing indicators |
 | `CHAT_TABLE_NAME` | Server | DynamoDB table for chat transcripts |
 | `SESSION_TABLE_NAME` | Server | DynamoDB table for session registry |
+| `WHITEBOARD_TABLE_NAME` | Server | DynamoDB table storing per-session whiteboard snapshots |
 | `SYMPY_SERVICE_URL` | Server | URL for the SymPy validation microservice |
 | `YJS_WEBSOCKET_URL` | Server | Optional; absolute URL for the production Yjs websocket bridge |
 | `NEXT_PUBLIC_APP_URL` | Client | Base URL used for links and share targets |
