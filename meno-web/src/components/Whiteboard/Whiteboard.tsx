@@ -12,6 +12,8 @@ import {
 import { cn } from "@/components/ui/cn";
 import { showToast } from "@/components/ui/Toast";
 
+import * as Y from "yjs";
+
 import {
   Tldraw,
   type TLUiOverrides,
@@ -23,6 +25,7 @@ import "@tldraw/tldraw/tldraw.css";
 import { usePresenceStore } from "@/lib/store/presence";
 import { useSessionStore } from "@/lib/store/session";
 import { useYjs } from "@/lib/whiteboard/provider";
+import { ensureSessionDoc } from "@/lib/whiteboard/sessionDoc";
 
 type WhiteboardProps = {
   className?: string;
@@ -131,6 +134,20 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
   );
 
   useEffect(() => {
+    if (!yjsConnection) return;
+    const awareness = yjsConnection.awareness;
+    const existing = awareness.getLocalState() ?? {};
+    awareness.setLocalState({
+      ...existing,
+      role: "host",
+      client: "web",
+      participantId: localParticipantId ?? existing.participantId ?? "anonymous",
+      color: localColor,
+      updatedAt: Date.now(),
+    });
+  }, [yjsConnection, localParticipantId, localColor]);
+
+  useEffect(() => {
     const editor = editorRef.current;
     const connection = yjsConnection;
 
@@ -141,11 +158,11 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
     }
 
     const { doc, provider } = connection;
-    const storeMap = doc.getMap("tldraw");
+    const { sessionMeta } = ensureSessionDoc(doc);
 
     let isApplyingRemote = false;
     let isPushingDoc = false;
-    let lastSerialized = (storeMap.get("snapshot") as string | undefined) ?? "";
+    let lastSerialized = (sessionMeta.get("whiteboardSnapshot") as string | undefined) ?? "";
     let cancelled = false;
 
     const canUseStorage = typeof window !== "undefined" && Boolean(localStorageKey);
@@ -205,8 +222,8 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
       }
       isPushingDoc = true;
       doc.transact(() => {
-        storeMap.set("snapshot", value);
-        storeMap.set("updatedAt", Date.now());
+        sessionMeta.set("whiteboardSnapshot", value);
+        sessionMeta.set("whiteboardUpdatedAt", Date.now());
       });
       lastSerialized = value;
       isPushingDoc = false;
@@ -224,7 +241,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
     };
 
     const applyRemoteSnapshot = (rawValue?: string, options?: { persist?: boolean }) => {
-      const raw = rawValue ?? (storeMap.get("snapshot") as string | undefined) ?? "";
+      const raw = rawValue ?? (sessionMeta.get("whiteboardSnapshot") as string | undefined) ?? "";
       if (!raw) {
         return;
       }
@@ -246,7 +263,10 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
       }
     };
 
-    const handleMapUpdate = () => {
+    const handleMapUpdate = (event: Y.YMapEvent<unknown>) => {
+      if (!event.keysChanged.has("whiteboardSnapshot")) {
+        return;
+      }
       if (isApplyingRemote || isPushingDoc) {
         return;
       }
@@ -256,7 +276,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
     const handleStatusChange = (event: { status: "connected" | "disconnected" }) => {
       if (event.status === "connected" && editor) {
         const local = loadLocalSnapshot();
-        const current = (storeMap.get("snapshot") as string | undefined) ?? "";
+        const current = (sessionMeta.get("whiteboardSnapshot") as string | undefined) ?? "";
         if (local && local !== current) {
           applyRemoteSnapshot(local);
         } else {
@@ -265,10 +285,10 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
       }
     };
 
-    storeMap.observe(handleMapUpdate);
+    sessionMeta.observe(handleMapUpdate);
     provider.on("status", handleStatusChange);
 
-    const existingDoc = (storeMap.get("snapshot") as string | undefined) ?? null;
+    const existingDoc = (sessionMeta.get("whiteboardSnapshot") as string | undefined) ?? null;
     const localSnapshot = loadLocalSnapshot();
 
     void (async () => {
@@ -320,7 +340,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
     );
 
     return () => {
-      storeMap.unobserve(handleMapUpdate);
+      sessionMeta.unobserve(handleMapUpdate);
       provider.off("status", handleStatusChange);
       unsubscribe();
       if (persistTimerRef.current) {
