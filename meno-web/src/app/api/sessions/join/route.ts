@@ -5,6 +5,8 @@ import {
   DEFAULT_MAX_PARTICIPANTS,
   getSessionByCode,
   getSessionById,
+  participantsMapToList,
+  type SessionParticipant,
   type SessionRecord,
 } from "@/lib/session/store";
 import { normalizeSessionCode } from "@/lib/session/code";
@@ -47,8 +49,8 @@ export async function POST(request: Request): Promise<Response> {
       return NextResponse.json({ ok: false, error: "Session expired" }, { status: 410 });
     }
 
+    const participants = participantsMapToList(session.participants);
     const maxParticipants = session.maxParticipants ?? DEFAULT_MAX_PARTICIPANTS;
-    const participants = session.participants ?? [];
     const alreadyMember = participants.some((participant) => participant.id === payload.participant.id);
 
     if (!alreadyMember && participants.length >= maxParticipants) {
@@ -60,9 +62,10 @@ export async function POST(request: Request): Promise<Response> {
       name: payload.participant.name,
       role: payload.participant.role ?? "student",
       joinedAt: new Date().toISOString(),
-    });
+    } satisfies SessionParticipant);
 
     const finalSession = updated ?? session;
+    const finalParticipants = participantsMapToList(finalSession.participants);
 
     return NextResponse.json({
       ok: true,
@@ -71,7 +74,7 @@ export async function POST(request: Request): Promise<Response> {
         code: finalSession.code,
         name: finalSession.name ?? null,
         difficulty: finalSession.difficulty ?? null,
-        participants: finalSession.participants,
+        participants: finalParticipants,
         maxParticipants,
       },
     });

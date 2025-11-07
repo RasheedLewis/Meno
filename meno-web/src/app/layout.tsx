@@ -4,7 +4,6 @@ import { EB_Garamond, Inter } from "next/font/google";
 import { PresenceOverlay } from "@/components/Presence/PresenceOverlay";
 import { SystemPromptBanner } from "@/components/session/SystemPromptBanner";
 import { ThemeWatcher } from "@/components/system/ThemeWatcher";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { ToastViewport } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
 

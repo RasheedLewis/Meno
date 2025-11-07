@@ -8,9 +8,16 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { showToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
-import { useSessionStore, type Participant, type SessionDifficulty, type ParticipantRole } from "@/lib/store/session";
+import {
+  useSessionStore,
+  type Participant,
+  type SessionDifficulty,
+  type ParticipantRole,
+} from "@/lib/store/session";
 import { normalizeSessionCode } from "@/lib/session/code";
 import { useUiStore } from "@/lib/store/ui";
+import { presenceClient } from "@/lib/presence/client";
+import { usePresenceStore } from "@/lib/store/presence";
 
 type Step = "welcome" | "identity" | "join" | "create" | "lobby";
 type Mode = "join" | "create";
@@ -18,6 +25,8 @@ type Mode = "join" | "create";
 const codePattern = /^[A-Z0-9]{4,8}$/;
 const namePattern = /^[A-Za-z]{1,20}$/;
 const sessionNameMax = 40;
+const lobbyPollIntervalMs = 5000;
+const fallbackMaxParticipants = 4;
 
 interface JoinErrors {
   name: string | null;
@@ -58,9 +67,14 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
   const setSessionMeta = useSessionStore((state) => state.setSessionMeta);
   const setPhase = useSessionStore((state) => state.setPhase);
   const participants = useSessionStore((state) => state.participants);
+  const sessionId = useSessionStore((state) => state.sessionId);
   const difficulty = useSessionStore((state) => state.difficulty);
   const bannerDismissed = useUiStore((state) => state.bannerDismissed);
   const showBanner = useUiStore((state) => state.showBanner);
+  const presenceConnection = usePresenceStore((state) => state.connectionState);
+  const setGlobalLoading = useSessionStore((state) => state.setLoading);
+  const setGlobalError = useSessionStore((state) => state.setError);
+  const hydrateSession = useSessionStore((state) => state.hydrateFromServer);
 
   const [step, setStep] = useState<Step>("welcome");
   const [mode, setMode] = useState<Mode>("join");
@@ -92,6 +106,105 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
       showBanner();
     }
   }, [step, showBanner]);
+
+  useEffect(() => {
+    if (step !== "lobby") {
+      return;
+    }
+
+    if (!sessionId || !participantId || !participantName) {
+      return;
+    }
+
+    presenceClient.connect({
+      sessionId,
+      participantId,
+      name: participantName,
+      role,
+    });
+
+    return () => {
+      presenceClient.disconnect();
+    };
+  }, [step, sessionId, participantId, participantName, role]);
+
+  useEffect(() => {
+    if (step !== "lobby") {
+      return;
+    }
+
+    if (!sessionId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const mapParticipants = (items: Array<{ id: string; name: string; role: ParticipantRole; joinedAt?: string }>): Participant[] =>
+      items.map((participant) => ({
+        id: participant.id,
+        name: participant.name,
+        role: participant.role,
+        presence: "online",
+      }));
+
+    const refresh = async () => {
+      try {
+        const response = await fetch(`/api/sessions/${sessionId}`);
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as
+          | {
+              ok: true;
+              data: {
+                sessionId: string;
+                code: string;
+                name: string | null;
+                difficulty: string | null;
+                participants: Array<{ id: string; name: string; role: ParticipantRole }>;
+                maxParticipants: number | null;
+              };
+            }
+          | { ok: false; error: string };
+
+        if (!payload.ok || cancelled) {
+          return;
+        }
+
+        hydrateSession({
+          sessionId: payload.data.sessionId,
+          code: payload.data.code,
+          sessionName: payload.data.name,
+          difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? null,
+          participants: mapParticipants(payload.data.participants ?? []),
+        });
+
+        setSessionSummary({
+          code: payload.data.code,
+          name: payload.data.name,
+          difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? null,
+          maxParticipants: payload.data.maxParticipants ?? fallbackMaxParticipants,
+        });
+      } catch (error) {
+        console.error("Session snapshot refresh failed", error);
+      }
+    };
+
+    void refresh();
+
+    if (presenceConnection === "open") {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const interval = window.setInterval(refresh, lobbyPollIntervalMs);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [hydrateSession, presenceConnection, sessionId, setSessionSummary, step]);
 
   const validateNameInput = () => {
     const trimmed = nameInput.trim();
@@ -149,10 +262,6 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
       setStep("create");
     }
   };
-
-  const setGlobalLoading = useSessionStore((state) => state.setLoading);
-  const setGlobalError = useSessionStore((state) => state.setError);
-  const hydrateSession = useSessionStore((state) => state.hydrateFromServer);
 
   const handleCreate = async () => {
     const nameResult = validateNameInput();

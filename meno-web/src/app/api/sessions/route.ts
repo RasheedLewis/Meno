@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { createSession, DEFAULT_MAX_PARTICIPANTS, getSessionByCode } from "@/lib/session/store";
+import { createSession, DEFAULT_MAX_PARTICIPANTS, getSessionByCode, type SessionParticipant } from "@/lib/session/store";
 import { generateSessionCode } from "@/lib/session/code";
 
 interface CreateSessionRequest {
@@ -40,6 +40,13 @@ export async function POST(request: Request): Promise<Response> {
 
     const now = new Date().toISOString();
 
+    const participant: SessionParticipant = {
+      id: payload.participant.id,
+      name: payload.participant.name,
+      role: payload.participant.role ?? "student",
+      joinedAt: now,
+    };
+
     await createSession({
       sessionId,
       code,
@@ -48,14 +55,9 @@ export async function POST(request: Request): Promise<Response> {
       creatorParticipantId: payload.participant.id,
       createdAt: now,
       maxParticipants: DEFAULT_MAX_PARTICIPANTS,
-      participants: [
-        {
-          id: payload.participant.id,
-          name: payload.participant.name,
-          role: payload.participant.role ?? "student",
-          joinedAt: now,
-        },
-      ],
+      participants: {
+        [participant.id]: participant,
+      },
     });
 
     return NextResponse.json({

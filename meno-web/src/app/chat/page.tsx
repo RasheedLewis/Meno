@@ -122,11 +122,6 @@ export default function ChatDemoPage() {
     return planToProblemMeta(hspPlan, demoProblem);
   }, [hspPlan, demoProblem]);
 
-  const handleUploadToggle = () => {
-    setProblemOpen(true);
-    setUploadOpen((value) => !value);
-  };
-
   return (
     <div className="relative flex min-h-screen w-full justify-center bg-[var(--surface)]">
       <Whiteboard className="fixed inset-0" />
