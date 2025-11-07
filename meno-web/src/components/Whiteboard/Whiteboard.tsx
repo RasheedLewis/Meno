@@ -32,6 +32,7 @@ export function Whiteboard({ className }: WhiteboardProps) {
   }, [localParticipantId, presenceParticipants]);
 
   const yjsConnection = useYjs(sessionId);
+  const localStorageKey = sessionId ? `meno-whiteboard-${sessionId}` : null;
 
   const overrides = useMemo<TLUiOverrides>(
     () => ({
@@ -62,26 +63,55 @@ export function Whiteboard({ className }: WhiteboardProps) {
       };
     }
 
-    const { doc } = connection;
-    const text = doc.getText("tldraw");
+    const { doc, provider } = connection;
+    const storeMap = doc.getMap("tldraw");
 
     let isApplyingRemote = false;
     let isPushingDoc = false;
+    let lastSerialized = (storeMap.get("snapshot") as string | undefined) ?? "";
 
-    const pushSnapshotToDoc = () => {
-      if (!editor) return;
-      const snapshot = editor.store.getStoreSnapshot();
-      const serialized = JSON.stringify(snapshot);
-      isPushingDoc = true;
-      doc.transact(() => {
-        text.delete(0, text.length);
-        text.insert(0, serialized);
-      });
-      isPushingDoc = false;
+    const canUseStorage = typeof window !== "undefined" && Boolean(localStorageKey);
+
+    const saveLocalSnapshot = (value: string) => {
+      if (!canUseStorage || !localStorageKey) return;
+      try {
+        window.localStorage.setItem(localStorageKey, value);
+      } catch (error) {
+        console.warn("Failed to persist whiteboard snapshot locally", error);
+      }
     };
 
-    const applyRemoteSnapshot = () => {
-      const raw = text.toString();
+    const loadLocalSnapshot = (): string | null => {
+      if (!canUseStorage || !localStorageKey) return null;
+      try {
+        return window.localStorage.getItem(localStorageKey);
+      } catch (error) {
+        console.warn("Failed to read whiteboard snapshot from storage", error);
+        return null;
+      }
+    };
+
+    const pushSnapshotToDoc = () => {
+      if (!editor) {
+        return;
+      }
+      const snapshot = editor.store.getStoreSnapshot();
+      const serialized = JSON.stringify(snapshot);
+      if (serialized === lastSerialized) {
+        return;
+      }
+      isPushingDoc = true;
+      doc.transact(() => {
+        storeMap.set("snapshot", serialized);
+        storeMap.set("updatedAt", Date.now());
+      });
+      lastSerialized = serialized;
+      isPushingDoc = false;
+      saveLocalSnapshot(serialized);
+    };
+
+    const applyRemoteSnapshot = (rawValue?: string) => {
+      const raw = rawValue ?? (storeMap.get("snapshot") as string | undefined) ?? "";
       if (!raw) {
         return;
       }
@@ -91,6 +121,8 @@ export function Whiteboard({ className }: WhiteboardProps) {
         editor.store.mergeRemoteChanges(() => {
           editor.store.loadStoreSnapshot(snapshot);
         });
+        lastSerialized = raw;
+        saveLocalSnapshot(raw);
       } catch (error) {
         console.error("Failed to apply remote whiteboard snapshot", error);
       } finally {
@@ -98,27 +130,40 @@ export function Whiteboard({ className }: WhiteboardProps) {
       }
     };
 
-    const handleTextUpdate = () => {
+    const handleMapUpdate = () => {
       if (isApplyingRemote || isPushingDoc) {
         return;
       }
       applyRemoteSnapshot();
     };
 
-    text.observe(handleTextUpdate);
+    const handleStatusChange = (event: { status: "connected" | "disconnected" }) => {
+      if (event.status === "connected" && editor) {
+        const local = loadLocalSnapshot();
+        const current = (storeMap.get("snapshot") as string | undefined) ?? "";
+        if (local && local !== current) {
+          applyRemoteSnapshot(local);
+        } else {
+          pushSnapshotToDoc();
+        }
+      }
+    };
 
-    if (text.length === 0) {
-      pushSnapshotToDoc();
+    storeMap.observe(handleMapUpdate);
+    provider.on("status", handleStatusChange);
+
+    const existingDoc = (storeMap.get("snapshot") as string | undefined) ?? null;
+    const localSnapshot = existingDoc ?? loadLocalSnapshot();
+
+    if (localSnapshot) {
+      applyRemoteSnapshot(localSnapshot);
     } else {
-      applyRemoteSnapshot();
+      pushSnapshotToDoc();
     }
 
     const unsubscribe = editor.store.listen(
       (entry) => {
-        if (isApplyingRemote) {
-          return;
-        }
-        if (entry.source === "remote") {
+        if (isApplyingRemote || entry.source === "remote") {
           return;
         }
         pushSnapshotToDoc();
@@ -127,10 +172,11 @@ export function Whiteboard({ className }: WhiteboardProps) {
     );
 
     return () => {
-      text.unobserve(handleTextUpdate);
+      storeMap.unobserve(handleMapUpdate);
+      provider.off("status", handleStatusChange);
       unsubscribe();
     };
-  }, [yjsConnection]);
+  }, [localStorageKey, yjsConnection]);
 
   return (
     <div className={cn("pointer-events-auto h-full w-full bg-[var(--paper)]", className)}>
