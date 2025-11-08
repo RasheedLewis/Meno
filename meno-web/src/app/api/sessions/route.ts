@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createSession, DEFAULT_MAX_PARTICIPANTS, getSessionByCode, type SessionParticipant } from "@/lib/session/store";
 import { generateSessionCode } from "@/lib/session/code";
+import { randomId } from "@/lib/utils/random";
 
 interface CreateSessionRequest {
   name?: string;
@@ -21,7 +22,7 @@ export async function POST(request: Request): Promise<Response> {
       return NextResponse.json({ ok: false, error: "Participant id and name are required" }, { status: 400 });
     }
 
-    const sessionId = globalThis.crypto?.randomUUID?.() ?? `session-${Date.now()}`;
+    const sessionId = randomId("session");
 
     let code = generateSessionCode(4);
     let attempts = 0;

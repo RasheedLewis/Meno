@@ -9,23 +9,18 @@ import {
   useRef,
 } from "react";
 
-import { cn } from "@/components/ui/cn";
-import { showToast } from "@/components/ui/Toast";
-
+import { fromUint8Array, toUint8Array } from "js-base64";
 import * as Y from "yjs";
 
-import {
-  Tldraw,
-  type TLUiOverrides,
-  exportToBlob,
-} from "@tldraw/tldraw";
-
-import "@tldraw/tldraw/tldraw.css";
-
+import { cn } from "@/components/ui/cn";
+import { showToast } from "@/components/ui/Toast";
+import { useSharedCanvas } from "@/lib/canvas/useSharedCanvas";
+import type { CanvasPoint } from "@/lib/canvas/types";
 import { usePresenceStore } from "@/lib/store/presence";
 import { useSessionStore } from "@/lib/store/session";
 import { useYjs } from "@/lib/whiteboard/provider";
-import { ensureSessionDoc } from "@/lib/whiteboard/sessionDoc";
+
+import SharedCanvas, { type SharedCanvasHandle } from "./SharedCanvas";
 
 type WhiteboardProps = {
   className?: string;
@@ -39,58 +34,198 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
   { className }: WhiteboardProps,
   ref,
 ) {
-  const editorRef = useRef<import("@tldraw/tldraw").Editor | null>(null);
-
   const presenceParticipants = usePresenceStore((state) => state.participants);
   const localParticipantId = useSessionStore((state) => state.participantId);
   const sessionId = useSessionStore((state) => state.sessionId);
 
   const localColor = useMemo(() => {
     const record = presenceParticipants.find((participant) => participant.participantId === localParticipantId);
-    return record?.color ?? "#8B5E3C";
+    return record?.color ?? "#2B8A9C";
   }, [localParticipantId, presenceParticipants]);
 
   const yjsConnection = useYjs(sessionId);
-  const localStorageKey = sessionId ? `meno-whiteboard-${sessionId}` : null;
-  const persistTimerRef = useRef<number | null>(null);
-  const lastPersistedRef = useRef<string>("");
+  const {
+    strokes,
+    beginStroke: beginStrokeInternal,
+    appendToStroke: appendToStrokeInternal,
+    endStroke: endStrokeInternal,
+    cancelStroke: cancelStrokeInternal,
+    clear: clearInternal,
+    eraseStroke: eraseStrokeInternal,
+    awareness,
+    doc,
+  } = useSharedCanvas(yjsConnection);
 
-  const overrides = useMemo<TLUiOverrides>(
-    () => ({
-      toolbar: (editor, toolbar) => toolbar,
-      stylePanel: () => null,
-      helperButtons: () => null,
-      contextMenu: () => null,
-      quickActions: () => [],
-      actionsMenu: () => [],
-      helpMenu: () => [],
-    }),
-    [],
+  const canvasRef = useRef<SharedCanvasHandle | null>(null);
+  const persistTimerRef = useRef<number | null>(null);
+  const lastSnapshotRef = useRef<string | null>(null);
+
+  const storageKey = typeof window === "undefined" || !sessionId ? null : `meno-whiteboard-state-${sessionId}`;
+
+  const beginStroke = useCallback(
+    (point: CanvasPoint, size: number) =>
+      beginStrokeInternal({
+        color: localColor,
+        size,
+        author: localParticipantId ?? null,
+        start: point,
+      }),
+    [beginStrokeInternal, localColor, localParticipantId],
+  );
+
+  const appendToStroke = useCallback(
+    (strokeId: string, points: CanvasPoint[]) => appendToStrokeInternal(strokeId, points),
+    [appendToStrokeInternal],
+  );
+
+  const endStroke = useCallback(
+    (strokeId: string) => endStrokeInternal(strokeId),
+    [endStrokeInternal],
+  );
+
+  const cancelStroke = useCallback(
+    (strokeId: string) => cancelStrokeInternal(strokeId),
+    [cancelStrokeInternal],
+  );
+
+  const handleClear = useCallback(() => {
+    clearInternal();
+  }, [clearInternal]);
+
+  const handleEraseLast = useCallback(() => {
+    const last = strokes.at(-1);
+    if (last) {
+      eraseStrokeInternal(last.id);
+    }
+  }, [eraseStrokeInternal, strokes]);
+
+  const updatePointer = useCallback(
+    (pointer: CanvasPoint | null) => {
+      if (!awareness) return;
+      const current = awareness.getLocalState() ?? {};
+      awareness.setLocalState({
+        ...current,
+        pointer,
+        color: localColor,
+        participantId: localParticipantId ?? undefined,
+        role: "host",
+        client: "web",
+        updatedAt: Date.now(),
+      });
+    },
+    [awareness, localColor, localParticipantId],
   );
 
   useEffect(() => {
-    if (editorRef.current && localColor) {
-      editorRef.current.user.updateUserPreferences({ color: localColor });
+    if (!awareness) return;
+    const current = awareness.getLocalState() ?? {};
+    awareness.setLocalState({
+      ...current,
+      pointer: null,
+      color: localColor,
+      participantId: localParticipantId ?? undefined,
+      role: "host",
+      client: "web",
+      updatedAt: Date.now(),
+    });
+  }, [awareness, localColor, localParticipantId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!doc || !sessionId) return;
+
+    const applySnapshot = (encoded: string | null | undefined) => {
+      if (!encoded || encoded === lastSnapshotRef.current) return;
+      try {
+        const update = toUint8Array(encoded);
+        Y.applyUpdate(doc, update);
+        lastSnapshotRef.current = encoded;
+        if (storageKey) {
+          window.localStorage.setItem(storageKey, encoded);
+        }
+      } catch (error) {
+        console.warn("Failed to apply whiteboard snapshot", error);
+      }
+    };
+
+    if (storageKey) {
+      try {
+        const cached = window.localStorage.getItem(storageKey);
+        applySnapshot(cached);
+      } catch (error) {
+        console.warn("Failed to read cached whiteboard snapshot", error);
+      }
     }
-  }, [localColor]);
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/whiteboard/${sessionId}`);
+        if (!response.ok) return;
+        const payload = (await response.json()) as
+          | { ok: true; data: { snapshot: string | null } | null }
+          | { ok: false; error: string };
+        if (payload?.ok) {
+          applySnapshot(payload.data?.snapshot ?? null);
+        }
+      } catch (error) {
+        console.warn("Failed to fetch whiteboard snapshot", error);
+      }
+    })();
+
+    const persistDoc = () => {
+      if (persistTimerRef.current) return;
+      persistTimerRef.current = window.setTimeout(async () => {
+        persistTimerRef.current = null;
+        try {
+          const update = Y.encodeStateAsUpdate(doc);
+          const encoded = fromUint8Array(update, true);
+          lastSnapshotRef.current = encoded;
+          if (storageKey) {
+            window.localStorage.setItem(storageKey, encoded);
+          }
+          await fetch(`/api/whiteboard/${sessionId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              snapshot: encoded,
+              updatedAt: new Date().toISOString(),
+            }),
+          });
+        } catch (error) {
+          console.warn("Failed to persist whiteboard snapshot", error);
+        }
+      }, 800);
+    };
+
+    const handleUpdate = () => {
+      persistDoc();
+    };
+
+    doc.on("update", handleUpdate);
+
+    return () => {
+      doc.off("update", handleUpdate);
+      if (persistTimerRef.current) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+    };
+  }, [doc, sessionId, storageKey]);
 
   const exportAsPng = useCallback(async () => {
-    const editor = editorRef.current;
-    if (!editor) {
+    const canvasElement = canvasRef.current?.getCanvas();
+    if (!canvasElement) {
       const message = "Whiteboard is still initializing.";
       showToast({ variant: "error", title: "Export failed", description: message });
       throw new Error(message);
     }
 
     try {
-      const ids = Array.from(editor.getCurrentPageShapeIds());
-      const blob = await exportToBlob({
-        editor,
-        ids,
-        format: "png",
-        opts: {
-          background: editor.getInstanceState().exportBackground ?? true,
-        },
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvasElement.toBlob((result) => {
+          if (result) resolve(result);
+          else reject(new Error("Unable to render canvas"));
+        }, "image/png");
       });
 
       const timestamp = new Date()
@@ -133,237 +268,23 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
     [exportAsPng],
   );
 
-  useEffect(() => {
-    if (!yjsConnection) return;
-    const awareness = yjsConnection.awareness;
-    const existing = awareness.getLocalState() ?? {};
-    awareness.setLocalState({
-      ...existing,
-      role: "host",
-      client: "web",
-      participantId: localParticipantId ?? existing.participantId ?? "anonymous",
-      color: localColor,
-      updatedAt: Date.now(),
-    });
-  }, [yjsConnection, localParticipantId, localColor]);
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    const connection = yjsConnection;
-
-    if (!editor || !connection) {
-      return () => {
-        /* noop */
-      };
-    }
-
-    const { doc, provider } = connection;
-    const { sessionMeta } = ensureSessionDoc(doc);
-
-    let isApplyingRemote = false;
-    let isPushingDoc = false;
-    let lastSerialized = (sessionMeta.get("whiteboardSnapshot") as string | undefined) ?? "";
-    let cancelled = false;
-
-    const canUseStorage = typeof window !== "undefined" && Boolean(localStorageKey);
-
-    const saveLocalSnapshot = (value: string) => {
-      if (!canUseStorage || !localStorageKey) return;
-      try {
-        window.localStorage.setItem(localStorageKey, value);
-      } catch (error) {
-        console.warn("Failed to persist whiteboard snapshot locally", error);
-      }
-    };
-
-    const loadLocalSnapshot = (): string | null => {
-      if (!canUseStorage || !localStorageKey) return null;
-      try {
-        return window.localStorage.getItem(localStorageKey);
-      } catch (error) {
-        console.warn("Failed to read whiteboard snapshot from storage", error);
-        return null;
-      }
-    };
-
-    const schedulePersist = (value: string) => {
-      if (!sessionId) return;
-      if (lastPersistedRef.current === value) {
-        return;
-      }
-      if (persistTimerRef.current) {
-        window.clearTimeout(persistTimerRef.current);
-      }
-      persistTimerRef.current = window.setTimeout(async () => {
-        if (cancelled) {
-          return;
-        }
-        persistTimerRef.current = null;
-        try {
-          const response = await fetch(`/api/whiteboard/${sessionId}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ snapshot: value, updatedAt: new Date().toISOString() }),
-          });
-          if (!response.ok) {
-            console.warn("Whiteboard snapshot persist failed", await response.text());
-            return;
-          }
-          lastPersistedRef.current = value;
-        } catch (error) {
-          console.warn("Whiteboard snapshot persist error", error);
-        }
-      }, 800);
-    };
-
-    const setDocSnapshot = (value: string) => {
-      if (value === lastSerialized) {
-        return;
-      }
-      isPushingDoc = true;
-      doc.transact(() => {
-        sessionMeta.set("whiteboardSnapshot", value);
-        sessionMeta.set("whiteboardUpdatedAt", Date.now());
-      });
-      lastSerialized = value;
-      isPushingDoc = false;
-    };
-
-    const pushSnapshotToDoc = () => {
-      if (!editor) {
-        return;
-      }
-      const snapshot = editor.store.getStoreSnapshot();
-      const serialized = JSON.stringify(snapshot);
-      setDocSnapshot(serialized);
-      saveLocalSnapshot(serialized);
-      schedulePersist(serialized);
-    };
-
-    const applyRemoteSnapshot = (rawValue?: string, options?: { persist?: boolean }) => {
-      const raw = rawValue ?? (sessionMeta.get("whiteboardSnapshot") as string | undefined) ?? "";
-      if (!raw) {
-        return;
-      }
-      try {
-        const snapshot = JSON.parse(raw);
-        isApplyingRemote = true;
-        editor.store.mergeRemoteChanges(() => {
-          editor.store.loadStoreSnapshot(snapshot);
-        });
-        lastSerialized = raw;
-        saveLocalSnapshot(raw);
-        if (options?.persist) {
-          schedulePersist(raw);
-        }
-      } catch (error) {
-        console.error("Failed to apply remote whiteboard snapshot", error);
-      } finally {
-        isApplyingRemote = false;
-      }
-    };
-
-    const handleMapUpdate = (event: Y.YMapEvent<unknown>) => {
-      if (!event.keysChanged.has("whiteboardSnapshot")) {
-        return;
-      }
-      if (isApplyingRemote || isPushingDoc) {
-        return;
-      }
-      applyRemoteSnapshot();
-    };
-
-    const handleStatusChange = (event: { status: "connected" | "disconnected" }) => {
-      if (event.status === "connected" && editor) {
-        const local = loadLocalSnapshot();
-        const current = (sessionMeta.get("whiteboardSnapshot") as string | undefined) ?? "";
-        if (local && local !== current) {
-          applyRemoteSnapshot(local);
-        } else {
-          pushSnapshotToDoc();
-        }
-      }
-    };
-
-    sessionMeta.observe(handleMapUpdate);
-    provider.on("status", handleStatusChange);
-
-    const existingDoc = (sessionMeta.get("whiteboardSnapshot") as string | undefined) ?? null;
-    const localSnapshot = loadLocalSnapshot();
-
-    void (async () => {
-      if (existingDoc) {
-        if (cancelled) return;
-        lastPersistedRef.current = existingDoc;
-        applyRemoteSnapshot(existingDoc);
-        return;
-      }
-
-      if (localSnapshot) {
-        if (cancelled) return;
-        setDocSnapshot(localSnapshot);
-        applyRemoteSnapshot(localSnapshot, { persist: true });
-        return;
-      }
-
-      if (sessionId) {
-        try {
-          const response = await fetch(`/api/whiteboard/${sessionId}`);
-          if (response.ok) {
-            const payload = (await response.json()) as
-              | { ok: true; data: { snapshot: string; updatedAt: string } | null }
-              | { ok: false; error: string };
-            if (payload?.ok && payload.data?.snapshot) {
-              if (cancelled) return;
-              lastPersistedRef.current = payload.data.snapshot;
-              setDocSnapshot(payload.data.snapshot);
-              applyRemoteSnapshot(payload.data.snapshot);
-              return;
-            }
-          }
-        } catch (error) {
-          console.warn("Failed to fetch whiteboard snapshot", error);
-        }
-      }
-
-      pushSnapshotToDoc();
-    })();
-
-    const unsubscribe = editor.store.listen(
-      (entry) => {
-        if (isApplyingRemote || entry.source === "remote") {
-          return;
-        }
-        pushSnapshotToDoc();
-      },
-      { scope: "document", source: "all" },
-    );
-
-    return () => {
-      sessionMeta.unobserve(handleMapUpdate);
-      provider.off("status", handleStatusChange);
-      unsubscribe();
-      if (persistTimerRef.current) {
-        window.clearTimeout(persistTimerRef.current);
-        persistTimerRef.current = null;
-      }
-      cancelled = true;
-    };
-  }, [localStorageKey, sessionId, yjsConnection]);
-
   return (
     <div className={cn("pointer-events-auto h-full w-full bg-[var(--paper)]", className)}>
-      <Tldraw
-        autoFocus
-        inferDarkMode
-        overrides={overrides}
-        onMount={(editor) => {
-          editorRef.current = editor;
-          if (localColor) {
-            editor.user.updateUserPreferences({ color: localColor });
-          }
-        }}
+      <SharedCanvas
+        ref={canvasRef}
+        strokes={strokes}
+        beginStroke={beginStroke}
+        appendToStroke={appendToStroke}
+        endStroke={endStroke}
+        cancelStroke={cancelStroke}
+        onClear={handleClear}
+        onEraseLast={handleEraseLast}
+        pointerColor={localColor}
+        awareness={awareness}
+        localParticipantId={localParticipantId}
+        onPointerUpdate={updatePointer}
       />
     </div>
   );
 });
+

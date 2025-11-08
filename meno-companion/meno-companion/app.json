@@ -41,8 +41,8 @@
       ]
     ],
     "extra": {
-      "apiBaseUrl": "http://localhost:3000",
-      "ywsBaseUrl": "ws://localhost:3000/api/yws"
+      "apiBaseUrl": "http://10.10.0.8:3000",
+      "ywsBaseUrl": "ws://10.10.0.8:1234/yjs"
     },
     "experiments": {
       "typedRoutes": true,

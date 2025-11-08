@@ -34,9 +34,20 @@ const initializeServer = (server: ExtendedServer) => {
             return;
         }
 
+        console.log("[YWS] upgrade", sessionId, request.headers["user-agent"]);
+
         wss.handleUpgrade(request, socket as never, head, (ws) => {
             (request as NextApiRequest).url = `/${sessionId}`;
             setupWSConnection(ws, request, { docName: sessionId, pingTimeout: 30_000 });
+            ws.on("open", () => {
+                console.log("[YWS] connection open", sessionId);
+            });
+            ws.on("close", (code, reason) => {
+                console.log("[YWS] connection close", sessionId, code, reason.toString());
+            });
+            ws.on("error", (error) => {
+                console.error("[YWS] connection error", sessionId, error);
+            });
         });
     });
 

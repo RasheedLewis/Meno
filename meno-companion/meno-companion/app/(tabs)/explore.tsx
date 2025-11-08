@@ -1,112 +1,154 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { useThemeColor } from '@/hooks/use-theme-color';
 
-export default function TabTwoScreen() {
+const ENTRY_SPACING = 18;
+
+const beforePairing = [
+  'Confirm the host has created or joined a Meno classroom session.',
+  'Ensure the Yjs websocket bridge (`/yws/:sessionId`) is reachable.',
+  'Verify the DynamoDB session registry is populated for this cohort.',
+  'Prefer the same Wi‑Fi network as the classroom display to reduce latency.',
+];
+
+const joinSteps = [
+  'Ask the host for the session code shown in the classroom top bar.',
+  'Enter the code on the Session tab here, then press “Join Session”.',
+  'Wait for the “Connecting to session…” spinner to dismiss before drawing.',
+];
+
+const syncedItems = [
+  'Pen strokes, eraser sweeps, undo/redo history',
+  'Awareness cursors with role + identity color',
+  'Shared step subdocs, session metadata, and event log',
+];
+
+const troubleshooting = [
+  'If nothing loads, double-check the session code and network connectivity.',
+  'Restart the companion app if awareness cursors freeze or drift.',
+  'Inspect the Expo console for Yjs websocket disconnects or auth errors.',
+  'Rejoin the session to refresh local persistence (`y-indexeddb`).',
+];
+
+const Section = ({
+  title,
+  items,
+  accentColor,
+  cardColor,
+  borderColor,
+}: {
+  title: string;
+  items: string[];
+  accentColor: string;
+  cardColor: string;
+  borderColor: string;
+}) => (
+  <View style={[styles.section, { backgroundColor: cardColor, borderColor }]}>
+    <ThemedText type="subtitle" style={[styles.sectionTitle, { color: accentColor }]}>
+      {title}
+    </ThemedText>
+    {items.map((item) => (
+      <ThemedText key={item} style={styles.sectionItem}>
+        • {item}
+      </ThemedText>
+    ))}
+  </View>
+);
+
+export default function CompanionGuideScreen() {
+  const background = useThemeColor({}, 'background');
+  const accent = useThemeColor({}, 'accent');
+  const muted = useThemeColor({}, 'muted');
+  const card = useThemeColor({}, 'card');
+  const border = useThemeColor({}, 'border');
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
+    <ThemedView style={[styles.container, { backgroundColor: background }]}>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}>
+        <ThemedText type="title" style={styles.heading}>
+          Companion Guide
+        </ThemedText>
+        <ThemedText style={[styles.lead, { color: muted }]}>
+          Follow these checkpoints to keep the companion tablet perfectly matched with the Meno
+          classroom canvas.
+        </ThemedText>
+
+        <Section
+          title="Before pairing"
+          items={beforePairing}
+          accentColor={accent}
+          cardColor={card}
+          borderColor={border}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
+
+        <Section
+          title="Join from tablet"
+          items={joinSteps}
+          accentColor={accent}
+          cardColor={card}
+          borderColor={border}
         />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+
+        <Section
+          title="What stays in sync"
+          items={syncedItems}
+          accentColor={accent}
+          cardColor={card}
+          borderColor={border}
+        />
+
+        <Section
+          title="Troubleshooting"
+          items={troubleshooting}
+          accentColor={accent}
+          cardColor={card}
+          borderColor={border}
+        />
+      </ScrollView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
+  content: {
+    paddingHorizontal: 28,
+    paddingBottom: 48,
+    paddingTop: 52,
+    gap: ENTRY_SPACING,
+  },
+  heading: {
+    textAlign: 'center',
+  },
+  lead: {
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
+  section: {
+    gap: 10,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    shadowColor: 'rgba(0,0,0,0.12)',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.08,
+    shadowRadius: 28,
+  },
+  sectionTitle: {
+    letterSpacing: 0.25,
+  },
+  sectionItem: {
+    fontSize: 16,
+    lineHeight: 24,
   },
 });

@@ -15,6 +15,7 @@ import {
   type ParticipantRole,
 } from "@/lib/store/session";
 import { normalizeSessionCode } from "@/lib/session/code";
+import { randomId } from "@/lib/utils/random";
 import { useUiStore } from "@/lib/store/ui";
 import { presenceClient } from "@/lib/presence/client";
 import { usePresenceStore } from "@/lib/store/presence";
@@ -47,10 +48,10 @@ interface SessionJoinFlowProps {
 const participantIdKey = "meno-participant-id";
 
 const ensureParticipantId = () => {
-  if (typeof window === "undefined") return `participant-${Math.random().toString(36).slice(2, 10)}`;
+  if (typeof window === "undefined") return randomId("participant");
   const existing = localStorage.getItem(participantIdKey);
   if (existing) return existing;
-  const id = globalThis.crypto?.randomUUID?.() ?? `participant-${Math.random().toString(36).slice(2, 10)}`;
+  const id = randomId("participant");
   localStorage.setItem(participantIdKey, id);
   return id;
 };

@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fromUint8Array, toUint8Array } from 'js-base64';
 
 import { YWS_BASE_URL } from '@/constants/config';
-import { ensureSessionDoc } from '@/lib/sessionDoc';
+import { ensureSessionDoc, getStrokesArray } from '@/lib/sessionDoc';
 
 type Doc = import('yjs').Doc;
 type WebsocketProvider = import('y-websocket').WebsocketProvider;
@@ -17,8 +17,18 @@ export interface YjsSessionConnection {
 
 const storageKeyFor = (sessionId: string) => `meno-companion-session-${sessionId}`;
 
-export function useSessionYjs(sessionId: string | null, role: 'companion' | 'host' | 'teacher') {
+interface SessionOptions {
+  color?: string;
+  participantId?: string;
+}
+
+export function useSessionYjs(
+  sessionId: string | null,
+  role: 'companion' | 'host' | 'teacher',
+  options: SessionOptions = {},
+) {
   const [connection, setConnection] = useState<YjsSessionConnection | null>(null);
+  const stateRef = useRef<YjsSessionConnection | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,6 +36,7 @@ export function useSessionYjs(sessionId: string | null, role: 'companion' | 'hos
     let provider: WebsocketProvider | null = null;
     let persistTimer: ReturnType<typeof setTimeout> | null = null;
     let yModule: typeof import('yjs') | null = null;
+    let docUpdateHandler: ((update: Uint8Array, origin: unknown) => void) | null = null;
 
     if (!sessionId) {
       setConnection(null);
@@ -76,28 +87,53 @@ export function useSessionYjs(sessionId: string | null, role: 'companion' | 'hos
           }
         }
 
-        ensureSessionDoc(doc);
+        const session = ensureSessionDoc(doc);
+        const strokesArray = getStrokesArray(session);
+        strokesArray.toArray();
 
-        doc.on('update', schedulePersist);
+        docUpdateHandler = (update: Uint8Array, origin: unknown) => {
+          console.log('[Companion Yjs] doc update', { length: update.length, origin });
+          schedulePersist();
+        };
+
+        doc.on('update', docUpdateHandler);
 
         provider = new WebsocketProvider(YWS_BASE_URL, sessionId, doc, {
           connect: true,
         });
 
+        provider.on('status', (event: { status: 'connected' | 'disconnected' }) => {
+          console.log('[Companion Yjs] status', event.status);
+        });
+
+        provider.on('sync', (isSynced: boolean) => {
+          console.log('[Companion Yjs] sync', isSynced);
+        });
+
         provider.awareness.setLocalState({
           role,
           client: 'tablet',
+          color: options.color ?? '#F97316',
+          participantId: options.participantId ?? role,
           updatedAt: Date.now(),
+          pointer: null,
         });
 
         if (!cancelled) {
-          setConnection({ doc, provider, awareness: provider.awareness });
+          const nextConnection: YjsSessionConnection = {
+            doc,
+            provider,
+            awareness: provider.awareness,
+          };
+          stateRef.current = nextConnection;
+          setConnection(nextConnection);
           void persistState();
         }
       } catch (error) {
         console.error('Failed to initialise companion Yjs connection', error);
         if (!cancelled) {
           setConnection(null);
+          stateRef.current = null;
         }
       }
     })();
@@ -105,21 +141,41 @@ export function useSessionYjs(sessionId: string | null, role: 'companion' | 'hos
     return () => {
       cancelled = true;
       setConnection(null);
+      stateRef.current = null;
       if (persistTimer) {
         clearTimeout(persistTimer);
         persistTimer = null;
       }
-      if (doc) {
-        doc.off('update', schedulePersist);
+      if (doc && docUpdateHandler) {
+        doc.off('update', docUpdateHandler);
       }
       if (provider) {
-        provider.destroy();
+        try {
+          provider.destroy();
+        } catch (error) {
+          console.warn('Failed to destroy Yjs provider', error);
+        }
       }
       if (doc) {
         doc.destroy();
       }
     };
   }, [sessionId, role]);
+
+  useEffect(() => {
+    const latest = stateRef.current ?? connection;
+    if (!latest?.provider) return;
+    const { awareness } = latest.provider;
+    const current = awareness.getLocalState() ?? {};
+    awareness.setLocalState({
+      ...current,
+      role,
+      client: 'tablet',
+      color: options.color ?? current.color ?? '#F97316',
+      participantId: options.participantId ?? current.participantId ?? role,
+      updatedAt: Date.now(),
+    });
+  }, [connection, options.color, options.participantId, role]);
 
   return connection;
 }

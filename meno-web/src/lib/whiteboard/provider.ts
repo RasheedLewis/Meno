@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { getYjsWebsocketBaseUrl } from "@/lib/whiteboard/config";
-import { ensureSessionDoc } from "@/lib/whiteboard/sessionDoc";
+import { ensureSessionDoc, getStrokesArray } from "@/lib/whiteboard/sessionDoc";
 
 type Doc = import("yjs").Doc;
 type WebsocketProvider = import("y-websocket").WebsocketProvider;
@@ -48,7 +48,10 @@ export function useYjs(roomId: string | null): YjsConnection | null {
         const serverUrl = getYjsWebsocketBaseUrl();
 
         doc = new Doc();
-        ensureSessionDoc(doc);
+
+        const session = ensureSessionDoc(doc);
+        const strokesArray = getStrokesArray(session);
+        strokesArray.toArray();
 
         if (IndexeddbPersistenceModule) {
           persistence = new IndexeddbPersistenceModule.IndexeddbPersistence(`meno-session-${roomId}`, doc);
@@ -86,14 +89,14 @@ export function useYjs(roomId: string | null): YjsConnection | null {
     return () => {
       cancelled = true;
       setConnection(null);
+      if (doc) {
+        doc.destroy();
+      }
       if (persistence?.destroy) {
         persistence.destroy();
       }
       if (provider) {
         provider.destroy();
-      }
-      if (doc) {
-        doc.destroy();
       }
     };
   }, [roomId]);

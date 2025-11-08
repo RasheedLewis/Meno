@@ -12,8 +12,9 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.922.0",
     "@aws-sdk/lib-dynamodb": "^3.922.0",
-    "@types/ws": "^8.18.1",
     "@tldraw/tldraw": "^2.0.0",
+    "@types/ws": "^8.18.1",
+    "js-base64": "^3.7.8",
     "katex": "^0.16.9",
     "next": "16.0.1",
     "react": "19.2.0",

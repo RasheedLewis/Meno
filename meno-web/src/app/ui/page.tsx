@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Sheet } from "@/components/ui/Sheet";
 import { useSessionStore } from "@/lib/store/session";
+import { randomId } from "@/lib/utils/random";
 
 export default function UiShowcasePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -52,7 +53,7 @@ export default function UiShowcasePage() {
 
   const handleJoinSession = () => {
     const name = participantName || "Anonymous";
-    const id = participantId ?? crypto.randomUUID();
+    const id = participantId ?? randomId("participant");
     const effectiveSession = sessionId ?? `session-${id.slice(0, 5)}`;
     setSessionId(effectiveSession);
     setParticipant({ id, name });

@@ -1,19 +1,7 @@
 import { create } from "zustand";
 
 import type { ChatMessage, ChatTranscript } from "@/lib/types/chat";
-
-const createMessageId = () => {
-  const globalCrypto =
-    typeof crypto !== "undefined"
-      ? (crypto as Crypto & { randomUUID?: () => string })
-      : undefined;
-
-  if (globalCrypto?.randomUUID) {
-    return globalCrypto.randomUUID();
-  }
-
-  return `msg-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`;
-};
+import { randomId } from "@/lib/utils/random";
 
 const nowIso = () => new Date().toISOString();
 
@@ -114,7 +102,7 @@ export const createChatMessage = (
   content: string,
   meta?: ChatMessage["meta"],
 ): ChatMessage => ({
-  id: createMessageId(),
+  id: randomId("msg"),
   role,
   content,
   createdAt: nowIso(),

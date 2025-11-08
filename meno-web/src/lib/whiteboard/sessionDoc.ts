@@ -1,16 +1,17 @@
 import * as Y from "yjs";
 
 export interface SessionDoc {
-  steps: Y.Array<Y.Doc>;
-  sessionMeta: Y.Map<unknown>;
+  strokes: Y.Array<Y.Map<unknown>>;
+  meta: Y.Map<unknown>;
   events: Y.Array<unknown>;
 }
 
 export const ensureSessionDoc = (doc: Y.Doc): SessionDoc => {
-  const steps = doc.getArray<Y.Doc>("steps");
-  const sessionMeta = doc.getMap<unknown>("sessionMeta");
+  const strokes = doc.getArray<Y.Map<unknown>>("strokes");
+  const meta = doc.getMap<unknown>("meta");
   const events = doc.getArray<unknown>("events");
-  return { steps, sessionMeta, events };
+  return { strokes, meta, events };
 };
 
+export const getStrokesArray = (session: SessionDoc) => session.strokes;
 

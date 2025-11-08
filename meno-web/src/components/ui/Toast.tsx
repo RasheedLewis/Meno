@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { cn } from "@/components/ui/cn";
+import { randomId } from "@/lib/utils/random";
 
 export interface ToastMessage {
   id: string;
@@ -16,7 +17,7 @@ let listeners: Array<(message: ToastMessage | null) => void> = [];
 
 export function showToast(message: Omit<ToastMessage, "id"> & { id?: string }) {
   const payload: ToastMessage = {
-    id: message.id ?? crypto.randomUUID(),
+    id: message.id ?? randomId("toast"),
     duration: message.duration ?? 3000,
     variant: message.variant ?? "default",
     ...message,

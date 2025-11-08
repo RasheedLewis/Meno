@@ -49,12 +49,12 @@ Enable a shared real-time handwriting workspace between the **web app** (host/te
 
 **Goal:** Both platforms render Yjs strokes with conflict-free updates.
 
-* Implement `useYCanvas()` hook for both platforms.
-* Integrate with Skia renderer (tablet) and `<Canvas>` (web).
-* Add stroke batching (`Y.transact` every 16 points).
-* Add erase op + GC (squash into thumbnail).
-* Awareness cursors & color indicators.
-* **Tests:** frame latency < 20 ms, undo/redo fidelity, cross-client draw parity.
+- [x] Implement `useYCanvas()` hook for both platforms.
+- [x] Integrate with Skia renderer (tablet) and `<Canvas>` (web).
+- [x] Add stroke batching (`Y.transact` every 16 points).
+- [x] Add erase op + GC (squash into thumbnail).
+- [x] Awareness cursors & color indicators.
+- [ ] **Tests:** frame latency < 20 ms, undo/redo fidelity, cross-client draw parity.
 
 ---
 

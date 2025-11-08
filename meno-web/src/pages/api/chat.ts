@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 
 import { listChatMessages, persistChatMessage } from "@/lib/chat/store";
 import type { ChatMessage } from "@/lib/types/chat";
+import { randomId } from "@/lib/utils/random";
 
 type ChatConnection = WebSocket & {
   meta?: {
@@ -120,7 +121,7 @@ const createServer = (server: HTTPServer): ChatServer => {
           return;
         }
 
-        const messageId = event.id ?? (globalThis.crypto?.randomUUID?.() ?? `msg-${Date.now()}`);
+        const messageId = event.id ?? randomId("msg");
         const createdAt = new Date().toISOString();
         const message: ChatMessage = {
           id: messageId,
