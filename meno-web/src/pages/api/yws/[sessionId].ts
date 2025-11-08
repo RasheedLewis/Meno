@@ -9,6 +9,16 @@ import {
     REALTIME_MESSAGE_TYPE,
     type RealtimeMessageType,
 } from "@/lib/realtime/messages";
+import { persistChatMessage } from "@/lib/chat/store";
+import {
+    upsertPresence,
+    updatePresenceState,
+} from "@/lib/presence/store";
+import type { ChatMessage } from "@/lib/types/chat";
+import type {
+    RealtimeChatAppendPayload,
+    RealtimePresenceEventPayload,
+} from "@/lib/realtime/messages";
 
 type ExtendedServer = HTTPServer & {
     __menoYjs?: {
@@ -60,18 +70,82 @@ const handleRealtimeClientMessage = (sessionId: string, ws: WebSocket, data: Raw
     try {
         const decoder = decoding.createDecoder(payload);
         const messageType = decoding.readVarUint(decoder) as RealtimeMessageType;
+        const payloadJson = decoding.hasContent(decoder) ? decoding.readVarString(decoder) : "";
+        const parsedPayload = payloadJson ? JSON.parse(payloadJson) : null;
 
         if (!CLIENT_MESSAGE_TYPES.has(messageType)) {
             return false;
         }
 
-        console.debug("[YWS] custom realtime message", {
-            sessionId,
-            messageType,
-            connection: ws.url,
-        });
+        if (messageType === REALTIME_MESSAGE_TYPE.CHAT_APPEND && parsedPayload) {
+            const { message } = parsedPayload as RealtimeChatAppendPayload;
+            const enriched: ChatMessage = {
+                ...message,
+                createdAt: message.createdAt ?? new Date().toISOString(),
+                meta: {
+                    ...message.meta,
+                    sessionId,
+                    participantId: message.meta?.participantId,
+                },
+            };
 
-        // TODO: route chat/presence/control payloads
+            void persistChatMessage({ sessionId, message: enriched }).catch((error) => {
+                console.error("[YWS] chat persistence failed", { sessionId, error });
+            });
+
+            return true;
+        }
+
+        if (messageType === REALTIME_MESSAGE_TYPE.PRESENCE_EVENT && parsedPayload) {
+            const { participantId, event } = parsedPayload as RealtimePresenceEventPayload;
+
+            if (!participantId) {
+                console.warn("[YWS] presence event missing participantId", { sessionId, event });
+                return true;
+            }
+
+            if (event.type === "join") {
+                void upsertPresence({
+                    sessionId,
+                    participantId,
+                    name: event.name,
+                    role: event.role,
+                }).catch((error) => {
+                    console.error("[YWS] presence join failed", { sessionId, error });
+                });
+                return true;
+            }
+
+            if (event.type === "typing") {
+                void updatePresenceState(sessionId, participantId, {
+                    isTyping: event.isTyping,
+                }).catch((error) => {
+                    console.error("[YWS] presence typing update failed", { sessionId, error });
+                });
+                return true;
+            }
+
+            if (event.type === "speaking") {
+                void updatePresenceState(sessionId, participantId, {
+                    isSpeaking: event.isSpeaking,
+                }).catch((error) => {
+                    console.error("[YWS] presence speaking update failed", { sessionId, error });
+                });
+                return true;
+            }
+
+            if (event.type === "heartbeat") {
+                void updatePresenceState(sessionId, participantId, {
+                    status: "online",
+                }).catch((error) => {
+                    console.error("[YWS] presence heartbeat failed", { sessionId, error });
+                });
+                return true;
+            }
+
+            return true;
+        }
+
         return true;
     } catch (error) {
         console.error("[YWS] failed to decode realtime message", { sessionId, error });
