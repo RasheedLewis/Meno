@@ -3,22 +3,23 @@ import type { Server as HTTPServer } from "http";
 import { WebSocketServer } from "ws";
 import type { RawData, WebSocket } from "ws";
 import * as decoding from "lib0/decoding";
+import * as encoding from "lib0/encoding";
 import { setupWSConnection } from "y-websocket/bin/utils";
 
 import {
     REALTIME_MESSAGE_TYPE,
     type RealtimeMessageType,
+    type RealtimeChatAppendPayload,
+    type RealtimePresenceEventPayload,
+    type RealtimePresenceParticipant,
 } from "@/lib/realtime/messages";
-import { persistChatMessage } from "@/lib/chat/store";
+import { persistChatMessage, listChatMessages } from "@/lib/chat/store";
 import {
     upsertPresence,
     updatePresenceState,
+    listPresence,
 } from "@/lib/presence/store";
 import type { ChatMessage } from "@/lib/types/chat";
-import type {
-    RealtimeChatAppendPayload,
-    RealtimePresenceEventPayload,
-} from "@/lib/realtime/messages";
 
 type ExtendedServer = HTTPServer & {
     __menoYjs?: {
@@ -37,6 +38,22 @@ const CLIENT_MESSAGE_TYPES = new Set<RealtimeMessageType>([
     REALTIME_MESSAGE_TYPE.PRESENCE_EVENT,
     REALTIME_MESSAGE_TYPE.CONTROL_LEASE_REQUEST,
 ]);
+
+const sendRealtimeServerMessage = async (
+    ws: WebSocket,
+    type: RealtimeMessageType,
+    payload: unknown,
+) => {
+    if (ws.readyState !== ws.OPEN) {
+        return;
+    }
+
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, type);
+    encoding.writeVarString(encoder, JSON.stringify(payload));
+
+    ws.send(encoding.toUint8Array(encoder));
+};
 
 const asUint8Array = (data: RawData): Uint8Array | null => {
     if (data instanceof Uint8Array) {
@@ -153,6 +170,52 @@ const handleRealtimeClientMessage = (sessionId: string, ws: WebSocket, data: Raw
     }
 };
 
+const computeTypingSummary = (participants: RealtimePresenceParticipant[]) => {
+    const typingIds = participants.filter((record) => record.isTyping).map((record) => record.participantId);
+    const typingSummary = typingIds.length === 0 ? "none" : typingIds.length === 1 ? "single" : "multiple";
+    return { typingSummary, typingIds };
+};
+
+const hydrateConnection = async (sessionId: string, ws: WebSocket) => {
+    try {
+        const [messages, presence] = await Promise.all([
+            listChatMessages(sessionId, 200),
+            listPresence(sessionId),
+        ]);
+
+        await sendRealtimeServerMessage(ws, REALTIME_MESSAGE_TYPE.CHAT_SYNC, {
+            sessionId,
+            messages,
+        });
+
+        const participants: RealtimePresenceParticipant[] = presence.map((record) => ({
+            participantId: record.participantId,
+            name: record.name,
+            role: record.role,
+            color: record.color,
+            status: record.status,
+            isTyping: record.isTyping,
+            isSpeaking: record.isSpeaking,
+            lastSeen: record.lastSeen,
+            muted: record.muted,
+            addressed: record.addressed,
+            caption: record.caption,
+            expiresAt: record.expiresAt,
+        }));
+
+        const { typingIds, typingSummary } = computeTypingSummary(participants);
+
+        await sendRealtimeServerMessage(ws, REALTIME_MESSAGE_TYPE.PRESENCE_SNAPSHOT, {
+            sessionId,
+            participants,
+            typingSummary,
+            typingIds,
+        });
+    } catch (error) {
+        console.error("[YWS] failed to hydrate connection", { sessionId, error });
+    }
+};
+
 const initializeServer = (server: ExtendedServer) => {
     if (server.__menoYjs) {
         return server.__menoYjs;
@@ -189,6 +252,7 @@ const initializeServer = (server: ExtendedServer) => {
             };
 
             setupWSConnection(ws, request, { docName: sessionId, pingTimeout: 30_000 });
+            void hydrateConnection(sessionId, ws);
             ws.on("open", () => {
                 console.log("[YWS] connection open", sessionId);
             });

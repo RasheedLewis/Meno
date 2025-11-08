@@ -211,7 +211,10 @@ Paths assume a Next.js + TypeScript web app using the `/app` directory and `page
 - [ ] Extend `yws` server handler to intercept custom packets before `setupWSConnection`.
 - [ ] Persist chat/presence payloads to Dynamo within the y-websocket server.
 - [ ] Replay chat history + presence roster on client reconnect.
+- [ ] Broadcast chat/presence/control packets over y-websocket to all clients.
+- [ ] Handle lease control (set/clear) via unified channel and emit state.
 - [ ] Update web client providers to send/receive custom packets over y-websocket.
+- [ ] Wire Zustand stores to consume unified realtime snapshots/streams.
 - [ ] Remove legacy chat/presence websocket client + server routes.
 
 **Files**
