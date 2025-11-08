@@ -52,6 +52,7 @@ export interface RealtimePresenceEventPayload {
   sessionId: string;
   participantId: string;
   event: PresenceClientEvent;
+  record?: RealtimePresenceParticipant;
 }
 
 export interface RealtimeControlLeaseStatePayload {
@@ -70,6 +71,7 @@ export type RealtimeServerMessagePayload =
   | RealtimeChatSyncPayload
   | RealtimeChatAppendPayload
   | RealtimePresenceSnapshotPayload
+  | RealtimePresenceEventPayload
   | RealtimeControlLeaseStatePayload;
 
 export type RealtimeClientMessagePayload =

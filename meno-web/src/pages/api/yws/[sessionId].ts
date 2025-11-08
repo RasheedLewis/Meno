@@ -18,13 +18,20 @@ import {
     upsertPresence,
     updatePresenceState,
     listPresence,
+    getPresence,
 } from "@/lib/presence/store";
+import type { PresenceRecord } from "@/lib/presence/types";
 import type { ChatMessage } from "@/lib/types/chat";
 
+type SessionConnections = Map<string, Set<WebSocket>>;
+
+type YjsServerState = {
+    wss: WebSocketServer;
+    connections: SessionConnections;
+};
+
 type ExtendedServer = HTTPServer & {
-    __menoYjs?: {
-        wss: WebSocketServer;
-    };
+    __menoYjs?: YjsServerState;
 };
 
 type ExtendedSocket = NextApiResponse["socket"] & {
@@ -78,7 +85,61 @@ const asUint8Array = (data: RawData): Uint8Array | null => {
     return null;
 };
 
-const handleRealtimeClientMessage = (sessionId: string, ws: WebSocket, data: RawData): boolean => {
+const mapPresenceRecord = (record: PresenceRecord): RealtimePresenceParticipant => ({
+    participantId: record.participantId,
+    name: record.name,
+    role: record.role,
+    color: record.color,
+    status: record.status,
+    isTyping: record.isTyping,
+    isSpeaking: record.isSpeaking,
+    lastSeen: record.lastSeen,
+    muted: record.muted,
+    addressed: record.addressed,
+    caption: record.caption,
+    expiresAt: record.expiresAt,
+});
+
+const broadcastRealtimeMessage = (
+    sessionId: string,
+    state: YjsServerState,
+    type: RealtimeMessageType,
+    payload: unknown,
+) => {
+    const targets = state.connections.get(sessionId);
+    if (!targets || targets.size === 0) {
+        return;
+    }
+    targets.forEach((connection) => {
+        void sendRealtimeServerMessage(connection, type, payload).catch((error) => {
+            console.error("[YWS] broadcast failed", { sessionId, type, error });
+        });
+    });
+};
+
+const registerConnection = (sessionId: string, ws: WebSocket, state: YjsServerState) => {
+    const current = state.connections.get(sessionId) ?? new Set<WebSocket>();
+    current.add(ws);
+    state.connections.set(sessionId, current);
+};
+
+const unregisterConnection = (sessionId: string, ws: WebSocket, state: YjsServerState) => {
+    const current = state.connections.get(sessionId);
+    if (!current) {
+        return;
+    }
+    current.delete(ws);
+    if (current.size === 0) {
+        state.connections.delete(sessionId);
+    }
+};
+
+const handleRealtimeClientMessage = (
+    sessionId: string,
+    ws: WebSocket,
+    data: RawData,
+    state: YjsServerState,
+): boolean => {
     const payload = asUint8Array(data);
     if (!payload) {
         return false;
@@ -110,6 +171,11 @@ const handleRealtimeClientMessage = (sessionId: string, ws: WebSocket, data: Raw
                 console.error("[YWS] chat persistence failed", { sessionId, error });
             });
 
+            broadcastRealtimeMessage(sessionId, state, REALTIME_MESSAGE_TYPE.CHAT_APPEND, {
+                sessionId,
+                message: enriched,
+            });
+
             return true;
         }
 
@@ -122,32 +188,64 @@ const handleRealtimeClientMessage = (sessionId: string, ws: WebSocket, data: Raw
             }
 
             if (event.type === "join") {
-                void upsertPresence({
-                    sessionId,
-                    participantId,
-                    name: event.name,
-                    role: event.role,
-                }).catch((error) => {
-                    console.error("[YWS] presence join failed", { sessionId, error });
-                });
+                void (async () => {
+                    try {
+                        const record = await upsertPresence({
+                            sessionId,
+                            participantId,
+                            name: event.name,
+                            role: event.role,
+                        });
+                        broadcastRealtimeMessage(sessionId, state, REALTIME_MESSAGE_TYPE.PRESENCE_EVENT, {
+                            sessionId,
+                            participantId,
+                            event,
+                            record: mapPresenceRecord(record),
+                        });
+                    } catch (error) {
+                        console.error("[YWS] presence join failed", { sessionId, error });
+                    }
+                })();
                 return true;
             }
 
             if (event.type === "typing") {
-                void updatePresenceState(sessionId, participantId, {
-                    isTyping: event.isTyping,
-                }).catch((error) => {
-                    console.error("[YWS] presence typing update failed", { sessionId, error });
-                });
+                void (async () => {
+                    try {
+                        await updatePresenceState(sessionId, participantId, {
+                            isTyping: event.isTyping,
+                        });
+                        const record = await getPresence(sessionId, participantId);
+                        broadcastRealtimeMessage(sessionId, state, REALTIME_MESSAGE_TYPE.PRESENCE_EVENT, {
+                            sessionId,
+                            participantId,
+                            event,
+                            record: record ? mapPresenceRecord(record) : undefined,
+                        });
+                    } catch (error) {
+                        console.error("[YWS] presence typing update failed", { sessionId, error });
+                    }
+                })();
                 return true;
             }
 
             if (event.type === "speaking") {
-                void updatePresenceState(sessionId, participantId, {
-                    isSpeaking: event.isSpeaking,
-                }).catch((error) => {
-                    console.error("[YWS] presence speaking update failed", { sessionId, error });
-                });
+                void (async () => {
+                    try {
+                        await updatePresenceState(sessionId, participantId, {
+                            isSpeaking: event.isSpeaking,
+                        });
+                        const record = await getPresence(sessionId, participantId);
+                        broadcastRealtimeMessage(sessionId, state, REALTIME_MESSAGE_TYPE.PRESENCE_EVENT, {
+                            sessionId,
+                            participantId,
+                            event,
+                            record: record ? mapPresenceRecord(record) : undefined,
+                        });
+                    } catch (error) {
+                        console.error("[YWS] presence speaking update failed", { sessionId, error });
+                    }
+                })();
                 return true;
             }
 
@@ -188,20 +286,9 @@ const hydrateConnection = async (sessionId: string, ws: WebSocket) => {
             messages,
         });
 
-        const participants: RealtimePresenceParticipant[] = presence.map((record) => ({
-            participantId: record.participantId,
-            name: record.name,
-            role: record.role,
-            color: record.color,
-            status: record.status,
-            isTyping: record.isTyping,
-            isSpeaking: record.isSpeaking,
-            lastSeen: record.lastSeen,
-            muted: record.muted,
-            addressed: record.addressed,
-            caption: record.caption,
-            expiresAt: record.expiresAt,
-        }));
+        const participants: RealtimePresenceParticipant[] = presence.map((record) =>
+            mapPresenceRecord(record),
+        );
 
         const { typingIds, typingSummary } = computeTypingSummary(participants);
 
@@ -222,6 +309,10 @@ const initializeServer = (server: ExtendedServer) => {
     }
 
     const wss = new WebSocketServer({ noServer: true });
+    const state: YjsServerState = {
+        wss,
+        connections: new Map(),
+    };
 
     server.on("upgrade", (request, socket, head) => {
         const url = new URL(request.url ?? "/", "http://localhost");
@@ -244,7 +335,7 @@ const initializeServer = (server: ExtendedServer) => {
             ws.emit = function patchedEmit(event: string | symbol, ...args: unknown[]) {
                 if (event === "message") {
                     const [messageData] = args as [RawData];
-                    if (handleRealtimeClientMessage(sessionId, ws, messageData)) {
+                    if (handleRealtimeClientMessage(sessionId, ws, messageData, state)) {
                         return false;
                     }
                 }
@@ -252,12 +343,14 @@ const initializeServer = (server: ExtendedServer) => {
             };
 
             setupWSConnection(ws, request, { docName: sessionId, pingTimeout: 30_000 });
+            registerConnection(sessionId, ws, state);
             void hydrateConnection(sessionId, ws);
             ws.on("open", () => {
                 console.log("[YWS] connection open", sessionId);
             });
             ws.on("close", (code, reason) => {
                 console.log("[YWS] connection close", sessionId, code, reason.toString());
+                unregisterConnection(sessionId, ws, state);
             });
             ws.on("error", (error) => {
                 console.error("[YWS] connection error", sessionId, error);
@@ -265,7 +358,7 @@ const initializeServer = (server: ExtendedServer) => {
         });
     });
 
-    server.__menoYjs = { wss };
+    server.__menoYjs = state;
     return server.__menoYjs;
 };
 
