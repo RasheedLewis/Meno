@@ -27,6 +27,7 @@ interface SharedSkiaCanvasProps {
   localParticipantId?: string | null;
   localDisplayName?: string;
   onPointerUpdate: (point: CanvasPoint | null) => void;
+  activeStepIndex?: number | null;
 }
 
 const CANVAS_BACKGROUND = '#FFFFFF';
@@ -44,6 +45,7 @@ export default function SharedSkiaCanvas({
   localParticipantId,
   localDisplayName,
   onPointerUpdate,
+  activeStepIndex,
 }: SharedSkiaCanvasProps) {
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [remotePointers, setRemotePointers] = useState<PointerState[]>([]);
@@ -205,6 +207,28 @@ export default function SharedSkiaCanvas({
     >
       <Canvas style={styles.canvas} pointerEvents="none">
         <Path path={Skia.Path.MakeFromSVGString(`M0 0 H${size.width} V${size.height} H0Z`) ?? Skia.Path.Make()} color={CANVAS_BACKGROUND} style="fill" />
+        {Array.from({ length: Math.max(6, Math.round(size.height / 120)) }).map((_, index, array) => {
+          const lineGap = size.height / Math.max(1, array.length);
+          const y = (index + 1) * lineGap;
+          const highlight = activeStepIndex !== null && activeStepIndex >= 0 && index === Math.min(activeStepIndex, array.length - 1);
+          const guidePath = Skia.Path.Make();
+          guidePath.moveTo(0, y);
+          guidePath.lineTo(size.width, y);
+          return (
+            <Path
+              key={`guide-${index}`}
+              path={guidePath}
+              color={highlight ? pointerColor : "rgba(54, 69, 79, 0.08)"}
+              strokeWidth={highlight ? 2 : 1}
+              style="stroke"
+              strokeCap="round"
+              strokeJoin="round"
+              start={0}
+              end={1}
+              dash={highlight ? undefined : [4, 8]}
+            />
+          );
+        })}
         {paths}
       </Canvas>
 

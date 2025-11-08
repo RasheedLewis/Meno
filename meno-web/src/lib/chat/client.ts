@@ -93,15 +93,18 @@ const send = (options: SendOptions) => {
 };
 
 const sendControlActiveLine = (payload: ControlActiveLineSetOptions | { clear: true }) => {
-  const message =
-    "clear" in payload && payload.clear
-      ? JSON.stringify({ type: "control.activeLine.clear" })
-      : JSON.stringify({
-        type: "control.activeLine.set",
-        stepIndex: payload.stepIndex,
-        leaseDurationMs: payload.leaseDurationMs,
-        ...(payload.leaseTo !== undefined ? { leaseTo: payload.leaseTo } : {}),
-      });
+  let message: string;
+  if ("clear" in payload && payload.clear) {
+    message = JSON.stringify({ type: "control.activeLine.clear" });
+  } else {
+    const options = payload as ControlActiveLineSetOptions;
+    message = JSON.stringify({
+      type: "control.activeLine.set",
+      stepIndex: options.stepIndex,
+      ...(options.leaseDurationMs !== undefined ? { leaseDurationMs: options.leaseDurationMs } : {}),
+      ...(options.leaseTo !== undefined ? { leaseTo: options.leaseTo } : {}),
+    });
+  }
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     outbox.push(message);
     return;

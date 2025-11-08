@@ -8,9 +8,10 @@ import { usePresenceStore, type PresenceState } from "@/lib/store/presence";
 import { useSessionStore } from "@/lib/store/session";
 
 const cornerPositions: Record<string, string> = {
-  topLeft: "top-[max(1.25rem,env(safe-area-inset-top)+1rem)] left-[max(1.25rem,env(safe-area-inset-left)+1rem)]",
+  topLeft:
+    "top-[max(7.5rem,env(safe-area-inset-top)+5.5rem)] left-[max(1.25rem,env(safe-area-inset-left)+1rem)]",
   topRight:
-    "top-[max(1.25rem,env(safe-area-inset-top)+1rem)] right-[max(1.25rem,env(safe-area-inset-right)+1rem)]",
+    "top-[max(7.5rem,env(safe-area-inset-top)+5.5rem)] right-[max(1.25rem,env(safe-area-inset-right)+1rem)]",
   bottomLeft:
     "bottom-[max(1.25rem,env(safe-area-inset-bottom)+1rem)] left-[max(1.25rem,env(safe-area-inset-left)+1rem)]",
   bottomRight:

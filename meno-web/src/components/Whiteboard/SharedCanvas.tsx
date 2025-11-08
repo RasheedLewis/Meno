@@ -38,6 +38,7 @@ interface SharedCanvasProps {
   localParticipantId?: string | null;
   localDisplayName?: string;
   onPointerUpdate: (point: CanvasPoint | null) => void;
+  activeStepIndex?: number | null;
 }
 
 const CANVAS_BACKGROUND = "#FFFFFF";
@@ -56,6 +57,7 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
     localParticipantId,
     localDisplayName,
     onPointerUpdate,
+    activeStepIndex,
   },
   ref,
 ) {
@@ -153,7 +155,35 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
     context.fillStyle = CANVAS_BACKGROUND;
     context.fillRect(0, 0, size.width, size.height);
 
+    const totalLines = Math.max(6, Math.round(size.height / 120));
+    const lineGap = size.height / totalLines;
+
+    context.strokeStyle = "rgba(54, 69, 79, 0.08)";
+    context.lineWidth = 1;
+    context.setLineDash([4, 8]);
+
+    for (let index = 0; index <= totalLines; index += 1) {
+      const y = Math.round(index * lineGap) + 0.5;
+      context.beginPath();
+      context.moveTo(0, y);
+      context.lineTo(size.width, y);
+      context.stroke();
+    }
+
+    if (activeStepIndex !== null && activeStepIndex >= 0) {
+      const clampedIndex = Math.min(activeStepIndex, totalLines - 1);
+      const y = Math.round((clampedIndex + 1) * lineGap) + 0.5;
+      context.strokeStyle = pointerColor;
+      context.lineWidth = 2;
+      context.setLineDash([]);
+      context.beginPath();
+      context.moveTo(0, y);
+      context.lineTo(size.width, y);
+      context.stroke();
+    }
+
     const baseDimension = Math.min(size.width, size.height);
+    context.setLineDash([]);
 
     for (const stroke of strokes) {
       const points = stroke.points;
@@ -176,7 +206,7 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
     }
 
     context.restore();
-  }, [size.height, size.width, strokes]);
+  }, [size.height, size.width, strokes, activeStepIndex, pointerColor]);
 
   useEffect(() => {
     drawStrokes();

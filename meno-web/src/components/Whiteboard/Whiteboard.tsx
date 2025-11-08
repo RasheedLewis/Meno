@@ -7,18 +7,21 @@ import {
   useImperativeHandle,
   useMemo,
   useRef,
+  useState,
 } from "react";
 
 import { fromUint8Array, toUint8Array } from "js-base64";
 import * as Y from "yjs";
 
 import { cn } from "@/components/ui/cn";
+import { Button } from "@/components/ui/Button";
 import { showToast } from "@/components/ui/Toast";
 import { useSharedCanvas } from "@/lib/canvas/useSharedCanvas";
 import type { CanvasPoint } from "@/lib/canvas/types";
 import { usePresenceStore } from "@/lib/store/presence";
 import { useSessionStore } from "@/lib/store/session";
 import { useYjs } from "@/lib/whiteboard/provider";
+import { chatClient } from "@/lib/chat/client";
 
 import SharedCanvas, { type SharedCanvasHandle } from "./SharedCanvas";
 
@@ -38,6 +41,8 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
   const localParticipantId = useSessionStore((state) => state.participantId);
   const participantName = useSessionStore((state) => state.participantName);
   const sessionParticipants = useSessionStore((state) => state.participants);
+  const activeLine = useSessionStore((state) => state.activeLine);
+  const setActiveLineState = useSessionStore((state) => state.setActiveLine);
   const sessionId = useSessionStore((state) => state.sessionId);
 
   const localColor = useMemo(() => {
@@ -52,6 +57,53 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
     const match = sessionParticipants.find((participant) => participant.id === localParticipantId);
     return match?.name ?? "You";
   }, [participantName, sessionParticipants, localParticipantId]);
+
+  const leaseHolderName = useMemo(() => {
+    if (!activeLine?.leaseTo) return null;
+    if (activeLine.leaseTo === localParticipantId) {
+      return localDisplayName;
+    }
+    const match = sessionParticipants.find((participant) => participant.id === activeLine.leaseTo);
+    return match?.name ?? "Participant";
+  }, [activeLine?.leaseTo, localParticipantId, localDisplayName, sessionParticipants]);
+
+  const leaseColor = useMemo(() => {
+    if (!activeLine?.leaseTo) return "var(--muted)";
+    if (activeLine.leaseTo === localParticipantId) return localColor;
+    const record = presenceParticipants.find((participant) => participant.participantId === activeLine.leaseTo);
+    return record?.color ?? "var(--muted)";
+  }, [activeLine?.leaseTo, localParticipantId, localColor, presenceParticipants]);
+
+  const [leaseCountdown, setLeaseCountdown] = useState<number>(0);
+
+  useEffect(() => {
+    if (!activeLine) {
+      setLeaseCountdown(0);
+      return;
+    }
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.floor((activeLine.leaseExpiresAt - Date.now()) / 1000));
+      setLeaseCountdown(remaining);
+      if (remaining <= 0) {
+        setActiveLineState(null);
+      }
+    };
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(timer);
+  }, [activeLine?.leaseId, activeLine?.leaseExpiresAt, setActiveLineState]);
+
+  const handleTakeControl = useCallback(() => {
+    if (!localParticipantId) return;
+    chatClient.setActiveLine({
+      stepIndex: activeLine?.stepIndex ?? null,
+      leaseTo: localParticipantId,
+    });
+  }, [activeLine?.stepIndex, localParticipantId]);
+
+  const handleReleaseControl = useCallback(() => {
+    chatClient.clearActiveLine();
+  }, []);
 
   const yjsConnection = useYjs(sessionId);
   const {
@@ -281,7 +333,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
   );
 
   return (
-    <div className={cn("pointer-events-auto h-full w-full bg-[var(--paper)]", className)}>
+    <div className={cn("pointer-events-auto relative h-full w-full bg-[var(--paper)]", className)}>
       <SharedCanvas
         ref={canvasRef}
         strokes={strokes}
@@ -296,7 +348,53 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
         localParticipantId={localParticipantId}
       localDisplayName={localDisplayName}
         onPointerUpdate={updatePointer}
+        activeStepIndex={activeLine?.stepIndex ?? null}
       />
+      {sessionId && localParticipantId ? (
+        <div className="pointer-events-none absolute top-4 right-4 flex flex-col items-end gap-2">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--card)]/95 px-4 py-2 text-xs text-[var(--muted)] shadow-soft">
+            <span className="flex items-center gap-2">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full border border-white/70"
+                style={{ backgroundColor: leaseHolderName ? leaseColor : "var(--border)" }}
+              />
+              {activeLine && activeLine.leaseTo && leaseCountdown > 0 ? (
+                activeLine.leaseTo === localParticipantId ? (
+                  <>
+                    <span>You control this step</span>
+                    <span aria-label="Lease countdown" className="font-semibold text-[var(--ink)]">
+                      {leaseCountdown}s
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span>{leaseHolderName} guiding</span>
+                    <span aria-label="Lease countdown" className="font-semibold text-[var(--ink)]">
+                      {leaseCountdown}s
+                    </span>
+                  </>
+                )
+              ) : (
+                <span>Line available</span>
+              )}
+            </span>
+            {activeLine && activeLine.leaseTo === localParticipantId && leaseCountdown > 0 ? (
+              <Button variant="ghost" size="sm" onClick={handleReleaseControl}>
+                Release
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleTakeControl}
+                disabled={!localParticipantId}
+              >
+                Take Control
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 });
