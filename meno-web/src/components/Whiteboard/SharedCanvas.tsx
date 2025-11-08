@@ -313,31 +313,31 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
       />
       {remoteCursorElements}
 
-      <div className="pointer-events-none absolute left-4 top-4 flex gap-2">
+      <div className="pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 gap-3">
         <button
           type="button"
-          className="pointer-events-auto rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs text-[var(--muted)] shadow-sm hover:bg-[var(--paper)]"
-          onClick={onClear}
-        >
-          Clear
-        </button>
-        <button
-          type="button"
-          className="pointer-events-auto rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs text-[var(--muted)] shadow-sm hover:bg-[var(--paper)]"
+          className="pointer-events-auto rounded-full border border-[var(--border)] bg-[var(--paper)]/95 px-4 py-1.5 text-sm font-medium text-[var(--muted)] shadow-sm transition hover:bg-[var(--paper)]"
           onClick={onEraseLast}
         >
           Undo
         </button>
+        <button
+          type="button"
+          className="pointer-events-auto rounded-full border border-[var(--border)] bg-[var(--paper)]/95 px-4 py-1.5 text-sm font-medium text-[var(--muted)] shadow-sm transition hover:bg-[var(--paper)]"
+          onClick={onClear}
+        >
+          Clear
+        </button>
       </div>
 
       <div
-        className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-white/60 bg-[var(--paper)]/90 px-3 py-1 text-xs text-[var(--muted)] shadow-sm backdrop-blur"
+        className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-white/50 bg-[var(--paper)]/85 px-3 py-1 text-xs text-[var(--muted)] shadow-sm backdrop-blur"
         style={{ color: pointerColor }}
       >
         {localParticipantId ?? "You"}
       </div>
       <div
-        className="pointer-events-none absolute bottom-4 right-4 rounded-full border border-white/60 bg-[var(--paper)]/90 px-3 py-1 text-xs text-[var(--muted)] shadow-sm backdrop-blur"
+        className="pointer-events-none absolute bottom-4 right-4 rounded-full border border-white/50 bg-[var(--paper)]/85 px-3 py-1 text-xs text-[var(--muted)] shadow-sm backdrop-blur"
         style={{ color: pointerColor }}
       >
         Brush ~{Math.round(Math.max(baseDimension * 0.015, 5))} px

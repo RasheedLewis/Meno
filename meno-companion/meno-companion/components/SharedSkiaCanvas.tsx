@@ -70,6 +70,7 @@ export default function SharedSkiaCanvas({
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: (event) => {
           const { locationX, locationY } = event.nativeEvent;
           if (size.width === 0 || size.height === 0) return;
@@ -181,7 +182,7 @@ export default function SharedSkiaCanvas({
       }}
       {...panResponder.panHandlers}
     >
-      <Canvas style={styles.canvas}>
+      <Canvas style={styles.canvas} pointerEvents="none">
         <Path path={Skia.Path.MakeFromSVGString(`M0 0 H${size.width} V${size.height} H0Z`) ?? Skia.Path.Make()} color={CANVAS_BACKGROUND} style="fill" />
         {paths}
       </Canvas>
