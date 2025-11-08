@@ -202,28 +202,28 @@ Paths assume a Next.js + TypeScript web app using the `/app` directory and `page
 
 ---
 
-## PR-10d: Unified Realtime Channel via Y-WebSocket
+## PR-10d: Realtime Channel via API Gateway WebSockets
 
-**Goal:** Migrate chat, presence, and lease control from the Next.js WebSocket to the existing y-websocket transport.
+**Goal:** Move chat, presence, and lease control onto an AWS API Gateway WebSocket backed by Lambda + DynamoDB, replacing the in-process Next.js sockets.
 
 **Subtasks**
-- [ ] Define shared realtime message constants/types (chat, presence, control).
-- [ ] Extend `yws` server handler to intercept custom packets before `setupWSConnection`.
-- [ ] Persist chat/presence payloads to Dynamo within the y-websocket server.
-- [ ] Replay chat history + presence roster on client reconnect.
-- [ ] Broadcast chat/presence/control packets over y-websocket to all clients.
-- [ ] Handle lease control (set/clear) via unified channel and emit state.
-- [ ] Update web client providers to send/receive custom packets over y-websocket.
-- [ ] Wire Zustand stores to consume unified realtime snapshots/streams.
-- [ ] Remove legacy chat/presence websocket client + server routes.
+- [ ] Lock down websocket message schema (chat, presence, control) and connection metadata contract.
+- [ ] Provision infrastructure (API Gateway WebSocket, Lambda handlers, DynamoDB tables) via CDK/CloudFormation.
+- [ ] Implement Lambda `$connect` / `$disconnect` / route handlers (persist connection, chat messages, presence, leases).
+- [ ] Broadcast events using API Gateway Management API; handle stale connections.
+- [ ] Expose REST hydrators (chat history, presence snapshot, lease state) for new clients.
+- [ ] Update web + tablet clients to connect to the new WebSocket URL and send/receive the defined actions.
+- [ ] Refactor Zustand stores to use AWS stream payloads; remove legacy Next.js websocket code.
+- [ ] Update session lifecycle to clear state and request hydrations on join/create.
+- [ ] Document deployment steps, environment variables, and fallback strategy.
 
 **Files**
-- (M) `src/pages/api/yws/[sessionId].ts` — custom transport handler + Dynamo wiring
-- (M) `src/lib/realtime/messages.ts` — shared message IDs + codecs
-- (M) `src/lib/store/chat.ts` — consume y-websocket events
-- (M) `src/lib/store/presence.ts` — hydrate from unified channel
-- (M) `src/lib/chat/client.ts`, `src/lib/presence/client.ts` — deprecate/remove
-- (M) `docs/PR_10_Tablet.md` — timeline for lease + solver gating follow-up
+- (A) `infrastructure/realtime/*` — CDK/SAM templates + lambda source
+- (A) `lambda/realtime/*` — handler logic (chat, presence, control)
+- (M) `src/lib/chat/client.ts`, `src/lib/presence/client.ts`, `src/lib/store/session.ts` — AWS WebSocket integration
+- (M) `src/components/ChatPane/ChatPane.tsx`, `src/components/Presence/*` — payload handling
+- (M) `src/components/session/SessionJoinFlow.tsx` — hydrate + reset logic
+- (M) `docs/PR_10_Tablet.md`, `docs/Meno_Roadmap_PRs.md` — updated architecture notes
 
 ---
 

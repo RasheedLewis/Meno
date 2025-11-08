@@ -1,7 +1,12 @@
 import type { ParticipantRole } from "@/lib/store/session";
 import { usePresenceStore } from "@/lib/store/presence";
-
-import type { PresenceBroadcast, PresenceClientEvent } from "./types";
+import { ensureRealtimeChannel, getRealtimeChannel } from "@/lib/realtime/channel";
+import type {
+  RealtimePresenceEventPayload,
+  RealtimePresenceParticipant,
+  RealtimePresenceSnapshotPayload,
+} from "@/lib/realtime/messages";
+import type { PresenceRecord } from "@/lib/presence/types";
 
 interface ConnectConfig {
   sessionId: string;
@@ -12,107 +17,122 @@ interface ConnectConfig {
 
 const HEARTBEAT_MS = 20_000;
 
-let socket: WebSocket | null = null;
+let lastConfig: ConnectConfig | null = null;
+let channelUnsubscribers: Array<() => void> = [];
 let heartbeatId: ReturnType<typeof setInterval> | null = null;
 let lastTypingState = false;
 
-const buildUrl = (config: ConnectConfig) => {
-  const origin = typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const url = new URL("/api/presence", origin);
-  url.protocol = url.protocol.replace("http", "ws");
-  url.searchParams.set("sessionId", config.sessionId);
-  url.searchParams.set("participantId", config.participantId);
-  url.searchParams.set("name", config.name);
-  url.searchParams.set("role", config.role);
-  return url.toString();
+const toPresenceRecord = (participant: RealtimePresenceParticipant): PresenceRecord => ({
+  sessionId: participant.sessionId,
+  participantId: participant.participantId,
+  name: participant.name,
+  role: participant.role,
+  color: participant.color,
+  status: participant.status,
+  isTyping: participant.isTyping,
+  isSpeaking: participant.isSpeaking,
+  lastSeen: participant.lastSeen,
+  muted: participant.muted,
+  addressed: participant.addressed,
+  caption: participant.caption,
+  expiresAt: participant.expiresAt,
+});
+
+const handleSnapshot = (payload: RealtimePresenceSnapshotPayload) => {
+  if (!lastConfig || payload.sessionId !== lastConfig.sessionId) return;
+  const participants = payload.participants.map(toPresenceRecord);
+  usePresenceStore.getState().setParticipants(participants, payload.typingSummary, payload.typingIds);
+  usePresenceStore.getState().setConnectionState("open");
 };
 
-const send = (payload: PresenceClientEvent) => {
-  if (!socket || socket.readyState !== WebSocket.OPEN) return;
-  socket.send(JSON.stringify(payload));
-};
-
-const startHeartbeat = () => {
-  stopHeartbeat();
-  heartbeatId = setInterval(() => {
-    send({ type: "heartbeat" });
-  }, HEARTBEAT_MS);
-};
-
-const stopHeartbeat = () => {
-  if (heartbeatId) {
-    clearInterval(heartbeatId);
-    heartbeatId = null;
+const handlePresenceEvent = (payload: RealtimePresenceEventPayload) => {
+  if (!lastConfig || payload.sessionId !== lastConfig.sessionId) return;
+  usePresenceStore.getState().setConnectionState("open");
+  if (payload.record) {
+    const snapshot = usePresenceStore.getState().participants.slice();
+    const index = snapshot.findIndex((item) => item.participantId === payload.record?.participantId);
+    const record = toPresenceRecord(payload.record);
+    if (index >= 0) {
+      snapshot[index] = record;
+    } else {
+      snapshot.push(record);
+    }
+    const typingIds = snapshot.filter((item) => item.isTyping).map((item) => item.participantId);
+    const typingSummary = typingIds.length === 0 ? "none" : typingIds.length === 1 ? "single" : "multiple";
+    usePresenceStore.getState().setParticipants(snapshot, typingSummary, typingIds);
   }
 };
 
-const handleBroadcast = (event: PresenceBroadcast) => {
-  usePresenceStore.getState().setParticipants(event.participants, event.typingSummary, event.typingIds);
+const attachChannel = (config: ConnectConfig) => {
+  const channel = getRealtimeChannel(config.sessionId) ?? ensureRealtimeChannel(config.sessionId);
+  channelUnsubscribers.forEach((unsubscribe) => unsubscribe());
+  channelUnsubscribers = [
+    channel.onPresenceSnapshot(handleSnapshot),
+    channel.onPresenceEvent(handlePresenceEvent),
+  ];
+  channel.sendPresenceEvent({
+    sessionId: config.sessionId,
+    participantId: config.participantId,
+    event: {
+      type: "join",
+      sessionId: config.sessionId,
+      participantId: config.participantId,
+      name: config.name,
+      role: config.role,
+    },
+  });
+  if (heartbeatId) {
+    clearInterval(heartbeatId);
+  }
+  heartbeatId = setInterval(() => {
+    channel.sendPresenceEvent({
+      sessionId: config.sessionId,
+      participantId: config.participantId,
+      event: { type: "heartbeat" },
+    });
+  }, HEARTBEAT_MS);
 };
 
 export const presenceClient = {
   connect: (config: ConnectConfig) => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      return;
-    }
-
+    lastConfig = config;
+    lastTypingState = false;
     usePresenceStore.getState().setConnectionState("connecting");
-
-    socket = new WebSocket(buildUrl(config));
-
-    socket.addEventListener("open", () => {
-      usePresenceStore.getState().setConnectionState("open");
-      send({
-        type: "join",
-        sessionId: config.sessionId,
-        participantId: config.participantId,
-        name: config.name,
-        role: config.role,
-      });
-      startHeartbeat();
-    });
-
-    socket.addEventListener("message", (event) => {
-      try {
-        const parsed = JSON.parse(event.data) as PresenceBroadcast | { type: string };
-        if (parsed.type === "presence.sync") {
-          handleBroadcast(parsed as PresenceBroadcast);
-        }
-      } catch (error) {
-        console.error("Failed to parse presence message", error);
-      }
-    });
-
-    socket.addEventListener("close", () => {
-      usePresenceStore.getState().setConnectionState("closed");
-      usePresenceStore.getState().reset();
-      stopHeartbeat();
-      socket = null;
-    });
-
-    socket.addEventListener("error", () => {
-      usePresenceStore.getState().setConnectionState("error");
-    });
+    attachChannel(config);
   },
 
   disconnect: () => {
-    if (!socket) return;
-    socket.close();
-    socket = null;
-    stopHeartbeat();
+    channelUnsubscribers.forEach((unsubscribe) => unsubscribe());
+    channelUnsubscribers = [];
+    if (heartbeatId) {
+      clearInterval(heartbeatId);
+      heartbeatId = null;
+    }
     usePresenceStore.getState().reset();
+    usePresenceStore.getState().setConnectionState("closed");
+    lastConfig = null;
     lastTypingState = false;
   },
 
   setTyping: (isTyping: boolean) => {
-    if (isTyping === lastTypingState) {
-      return;
-    }
+    if (!lastConfig) return;
+    if (isTyping === lastTypingState) return;
     lastTypingState = isTyping;
-    send({ type: "typing", isTyping });
+    const channel = getRealtimeChannel(lastConfig.sessionId) ?? ensureRealtimeChannel(lastConfig.sessionId);
+    channel.sendPresenceEvent({
+      sessionId: lastConfig.sessionId,
+      participantId: lastConfig.participantId,
+      event: { type: "typing", isTyping },
+    });
   },
 
   setSpeaking: (isSpeaking: boolean) => {
-    send({ type: "speaking", isSpeaking });
+    if (!lastConfig) return;
+    const channel = getRealtimeChannel(lastConfig.sessionId) ?? ensureRealtimeChannel(lastConfig.sessionId);
+    channel.sendPresenceEvent({
+      sessionId: lastConfig.sessionId,
+      participantId: lastConfig.participantId,
+      event: { type: "speaking", isSpeaking },
+    });
   },
 };

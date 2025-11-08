@@ -34,6 +34,7 @@ export interface RealtimePresenceSnapshotPayload {
 }
 
 export interface RealtimePresenceParticipant {
+  sessionId: string;
   participantId: string;
   name: string;
   role: "student" | "teacher" | "observer";

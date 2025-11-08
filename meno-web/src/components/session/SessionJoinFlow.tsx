@@ -20,6 +20,7 @@ import { randomId } from "@/lib/utils/random";
 import { useUiStore } from "@/lib/store/ui";
 import { presenceClient } from "@/lib/presence/client";
 import { usePresenceStore } from "@/lib/store/presence";
+import { useChatStore } from "@/lib/store/chat";
 
 type Step = "welcome" | "identity" | "join" | "create" | "lobby";
 type Mode = "join" | "create";
@@ -77,6 +78,7 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
   const setGlobalLoading = useSessionStore((state) => state.setLoading);
   const setGlobalError = useSessionStore((state) => state.setError);
   const hydrateSession = useSessionStore((state) => state.hydrateFromServer);
+  const clearChatMessages = useChatStore((state) => state.clearMessages);
 
   const [step, setStep] = useState<Step>("welcome");
   const [mode, setMode] = useState<Mode>("join");
@@ -311,6 +313,10 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
         throw new Error(payload.ok ? "Failed to create session" : payload.error);
       }
 
+      useSessionStore.getState().setHspPlan(null);
+      clearChatMessages();
+      usePresenceStore.getState().reset();
+
       const sessionId = payload.data.sessionId;
       setSessionId(sessionId);
       setSessionCode(payload.data.code);
@@ -402,6 +408,10 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
       if (!response.ok || !payload.ok) {
         throw new Error(payload.ok ? "Failed to join session" : payload.error);
       }
+
+      useSessionStore.getState().setHspPlan(null);
+      clearChatMessages();
+      usePresenceStore.getState().reset();
 
       const sessionId = payload.data.sessionId;
       setSessionId(sessionId);

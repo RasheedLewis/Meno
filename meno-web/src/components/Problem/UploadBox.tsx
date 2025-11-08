@@ -19,6 +19,8 @@ import { KaTeXBlock } from "@/components/Math/KaTeXBlock";
 import { showToast } from "@/components/ui/Toast";
 import { normalizeId } from "@/lib/utils/id";
 import type { HspPlan, OcrUploadRecord } from "@/lib/hsp/schema";
+import { chatClient } from "@/lib/chat/client";
+import { createChatMessage, useChatStore } from "@/lib/store/chat";
 
 type UploadStatus = "queued" | "processing" | "succeeded" | "failed";
 
@@ -58,6 +60,7 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
   const setHspPlan = useSessionStore((state) => state.setHspPlan);
   const hspPlan = useSessionStore((state) => state.hspPlan);
   const [history, setHistory] = useState<OcrUploadRecord[]>([]);
+  const addChatMessage = useChatStore((state) => state.addMessage);
 
   useEffect(() => {
     if (hspPlan?.meta?.uploads) {
@@ -171,6 +174,35 @@ export function UploadBox({ onResult, className }: UploadBoxProps) {
         );
 
         onResult?.(data.data, upload.file);
+
+        const chatContentParts = [
+          `Problem uploaded: ${upload.file.name}`,
+          data.data.plainText ?? data.data.canonicalText,
+        ].filter(Boolean);
+
+        if (chatContentParts.length > 0) {
+          const uploadMessage = createChatMessage("system", chatContentParts.join("\n\n"), {
+            source: "system",
+            channel: "public",
+            tags: ["upload"],
+            payload: {
+              fileName: upload.file.name,
+              canonicalText: data.data.canonicalText,
+              plainText: data.data.plainText,
+              mathSegments: data.data.mathSegments,
+            },
+          });
+          addChatMessage(uploadMessage);
+          if (sessionId) {
+            chatClient.sendMessage({
+              id: uploadMessage.id,
+              content: uploadMessage.content,
+              role: uploadMessage.role,
+              createdAt: uploadMessage.createdAt,
+              meta: uploadMessage.meta,
+            });
+          }
+        }
 
         await maybeGenerateHspPlan(upload.file, data.data, base64, sessionId ?? null);
       } catch (error) {

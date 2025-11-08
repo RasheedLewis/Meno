@@ -67,6 +67,7 @@ export function ChatPane({ className }: { className?: string }) {
   const participantId = useSessionStore((state) => state.participantId);
   const participantName = useSessionStore((state) => state.participantName);
   const participantRole = useSessionStore((state) => state.role);
+  const realtimeChannel = useSessionStore((state) => state.realtimeChannel);
   const planId = hspPlan?.id ?? hspPlanId;
 
   const [input, setInput] = useState("");
@@ -113,7 +114,7 @@ export function ChatPane({ className }: { className?: string }) {
   const skippedFirstCleanupRef = useRef(false);
 
   useEffect(() => {
-    if (!sessionId || !participantId || !participantName) {
+    if (!sessionId || !participantId || !participantName || !realtimeChannel) {
       return;
     }
 
@@ -142,7 +143,7 @@ export function ChatPane({ className }: { className?: string }) {
         typingTimerRef.current = null;
       }
     };
-  }, [sessionId, participantId, participantName, participantRole]);
+  }, [sessionId, participantId, participantName, participantRole, realtimeChannel]);
 
   const resetDialogueState = () => {
     clearMessages();
@@ -230,6 +231,7 @@ export function ChatPane({ className }: { className?: string }) {
       id: studentMessage.id,
       content: studentMessage.content,
       role: studentMessage.role,
+      createdAt: studentMessage.createdAt,
       meta: studentMessage.meta,
     });
     sendTurn(trimmed, sessionId, planId, quickCheck ?? undefined);
@@ -383,6 +385,7 @@ export function ChatPane({ className }: { className?: string }) {
       id: menoMessage.id,
       content: menoMessage.content,
       role: menoMessage.role,
+      createdAt: menoMessage.createdAt,
       meta: menoMessage.meta,
     });
   };

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 import type { HspPlan } from "@/lib/hsp/schema";
+import type { RealtimeChannel } from "@/lib/realtime/channel";
 
 export type ParticipantRole = "student" | "teacher" | "observer";
 export type SessionPhase = "idle" | "joining" | "active" | "completed";
@@ -64,6 +65,8 @@ interface SessionState {
     participants?: Participant[];
     activeLine?: ActiveLineLease | null;
   }) => void;
+  realtimeChannel: RealtimeChannel | null;
+  setRealtimeChannel: (channel: RealtimeChannel | null) => void;
   resetSession: () => void;
 }
 
@@ -82,6 +85,7 @@ type SessionBaseState = {
   isLoading: boolean;
   error: string | null;
   activeLine: ActiveLineLease | null;
+  realtimeChannel: RealtimeChannel | null;
 };
 
 const baseSession: SessionBaseState = {
@@ -99,6 +103,7 @@ const baseSession: SessionBaseState = {
   isLoading: false,
   error: null,
   activeLine: null,
+  realtimeChannel: null,
 };
 
 export const useSessionStore = create<SessionState>()(
@@ -151,7 +156,11 @@ export const useSessionStore = create<SessionState>()(
           difficulty: difficulty ?? state.difficulty,
           participants: participants ?? state.participants,
           activeLine: activeLine ?? state.activeLine,
+          hspPlanId: null,
+          hspPlan: null,
         })),
+      realtimeChannel: null,
+      setRealtimeChannel: (channel) => set({ realtimeChannel: channel }),
       resetSession: () => set({ ...baseSession }),
     }),
     {

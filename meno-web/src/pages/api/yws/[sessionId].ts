@@ -92,6 +92,7 @@ const asUint8Array = (data: RawData): Uint8Array | null => {
 };
 
 const mapPresenceRecord = (record: PresenceRecord): RealtimePresenceParticipant => ({
+    sessionId: record.sessionId,
     participantId: record.participantId,
     name: record.name,
     role: record.role,
