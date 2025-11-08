@@ -5,6 +5,12 @@ import { WebSocketServer, WebSocket } from "ws";
 import { listChatMessages, persistChatMessage } from "@/lib/chat/store";
 import type { ChatMessage } from "@/lib/types/chat";
 import { randomId } from "@/lib/utils/random";
+import {
+  clearActiveLineLease,
+  getSessionById,
+  setActiveLineLease,
+  type ActiveLineState,
+} from "@/lib/session/store";
 
 type ChatConnection = WebSocket & {
   meta?: {
@@ -30,6 +36,19 @@ interface SendEvent {
   meta?: ChatMessage["meta"];
 }
 
+interface ControlSetActiveLineEvent {
+  type: "control.activeLine.set";
+  stepIndex: number | null;
+  leaseTo: string | null;
+  leaseDurationMs?: number;
+}
+
+interface ControlClearActiveLineEvent {
+  type: "control.activeLine.clear";
+}
+
+type ClientEvent = SendEvent | ControlSetActiveLineEvent | ControlClearActiveLineEvent;
+
 interface AckEvent {
   type: "chat.ack";
   id: string;
@@ -47,7 +66,11 @@ interface MessageEvent {
   message: ChatMessage;
 }
 
-type ClientEvent = SendEvent;
+interface ControlActiveLineEvent {
+  type: "control.activeLine";
+  sessionId: string;
+  activeLine: ActiveLineState | null;
+}
 
 const createServer = (server: HTTPServer): ChatServer => {
   const wss = new WebSocketServer({ noServer: true });
@@ -67,7 +90,7 @@ const createServer = (server: HTTPServer): ChatServer => {
     }
   };
 
-  const broadcast = (sessionId: string, payload: MessageEvent | SyncEvent | AckEvent) => {
+  const broadcast = (sessionId: string, payload: MessageEvent | SyncEvent | AckEvent | ControlActiveLineEvent) => {
     const message = JSON.stringify(payload);
     connections.get(sessionId)?.forEach((connection) => {
       if (connection.readyState === WebSocket.OPEN) {
@@ -114,44 +137,92 @@ const createServer = (server: HTTPServer): ChatServer => {
       console.error("Chat history load failed", error);
     }
 
+    try {
+      const session = await getSessionById(sessionId);
+      socket.send(
+        JSON.stringify({
+          type: "control.activeLine",
+          sessionId,
+          activeLine: session?.activeLine ?? null,
+        } satisfies ControlActiveLineEvent),
+      );
+    } catch (error) {
+      console.error("Failed to load active line state", error);
+    }
+
     socket.on("message", async (raw) => {
       try {
         const event = JSON.parse(raw.toString()) as ClientEvent;
-        if (event.type !== "chat.send" || !socket.meta) {
+        if (!socket.meta) {
           return;
         }
 
-        const messageId = event.id ?? randomId("msg");
-        const createdAt = new Date().toISOString();
-        const message: ChatMessage = {
-          id: messageId,
-          role: event.role ?? socket.meta.role ?? "student",
-          content: event.content,
-          createdAt,
-          meta: {
-            ...event.meta,
-            sessionId: socket.meta.sessionId,
-            participantId: socket.meta.participantId,
-            source: event.meta?.source ?? "chat",
-            channel: event.meta?.channel ?? "public",
-            payload: {
-              ...event.meta?.payload,
-              senderName: socket.meta.name,
+        if (event.type === "chat.send") {
+          const messageId = event.id ?? randomId("msg");
+          const createdAt = new Date().toISOString();
+          const message: ChatMessage = {
+            id: messageId,
+            role: event.role ?? socket.meta.role ?? "student",
+            content: event.content,
+            createdAt,
+            meta: {
+              ...event.meta,
+              sessionId: socket.meta.sessionId,
+              participantId: socket.meta.participantId,
+              source: event.meta?.source ?? "chat",
+              channel: event.meta?.channel ?? "public",
+              payload: {
+                ...event.meta?.payload,
+                senderName: socket.meta.name,
+              },
             },
-          },
-        };
+          };
 
-        try {
-          await persistChatMessage({ sessionId: socket.meta.sessionId, message });
-        } catch (persistenceError) {
-          console.error("Chat persistence failed", persistenceError);
+          try {
+            await persistChatMessage({ sessionId: socket.meta.sessionId, message });
+          } catch (persistenceError) {
+            console.error("Chat persistence failed", persistenceError);
+          }
+
+          broadcast(socket.meta.sessionId, {
+            type: "chat.message",
+            sessionId: socket.meta.sessionId,
+            message,
+          });
+          return;
         }
 
-        broadcast(socket.meta.sessionId, {
-          type: "chat.message",
-          sessionId: socket.meta.sessionId,
-          message,
-        });
+        if (event.type === "control.activeLine.set") {
+          try {
+            const record = await setActiveLineLease(socket.meta.sessionId, {
+              stepIndex: event.stepIndex ?? null,
+              leaseTo: event.leaseTo ?? socket.meta.participantId,
+              leaseDurationMs: event.leaseDurationMs,
+            });
+            broadcast(socket.meta.sessionId, {
+              type: "control.activeLine",
+              sessionId: socket.meta.sessionId,
+              activeLine: record?.activeLine ?? null,
+            });
+          } catch (error) {
+            console.error("Failed to set active line lease", error);
+          }
+          return;
+        }
+
+        if (event.type === "control.activeLine.clear") {
+          try {
+            const record = await clearActiveLineLease(socket.meta.sessionId);
+            broadcast(socket.meta.sessionId, {
+              type: "control.activeLine",
+              sessionId: socket.meta.sessionId,
+              activeLine: record?.activeLine ?? null,
+            });
+          } catch (error) {
+            console.error("Failed to clear active line lease", error);
+          }
+          return;
+        }
       } catch (error) {
         console.error("Chat message handling failed", error);
       }

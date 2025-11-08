@@ -13,6 +13,7 @@ import {
   type Participant,
   type SessionDifficulty,
   type ParticipantRole,
+  type ActiveLineLease,
 } from "@/lib/store/session";
 import { normalizeSessionCode } from "@/lib/session/code";
 import { randomId } from "@/lib/utils/random";
@@ -301,6 +302,7 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
               difficulty: string | null;
               participant: { id: string; name: string; role: ParticipantRole };
               maxParticipants: number;
+              activeLine?: ActiveLineLease | null;
             };
           }
         | { ok: false; error: string };
@@ -327,6 +329,7 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
             presence: "online",
           } satisfies Participant,
         ],
+        activeLine: payload.data.activeLine ?? null,
       });
       setSessionMeta({ sessionName: payload.data.name, difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? undefined });
       setSessionSummary({
@@ -391,6 +394,7 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
               difficulty: string | null;
               participants: Array<{ id: string; name: string; role: ParticipantRole }>;
               maxParticipants: number;
+              activeLine?: ActiveLineLease | null;
             };
           }
         | { ok: false; error: string };
@@ -415,6 +419,7 @@ export function SessionJoinFlow({ className }: SessionJoinFlowProps) {
           role: participant.role,
           presence: "online",
         })),
+        activeLine: payload.data.activeLine ?? null,
       });
       setSessionMeta({ sessionName: payload.data.name, difficulty: (payload.data.difficulty as SessionDifficulty | null) ?? undefined });
       setSessionSummary({

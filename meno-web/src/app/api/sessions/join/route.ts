@@ -76,6 +76,7 @@ export async function POST(request: Request): Promise<Response> {
         difficulty: finalSession.difficulty ?? null,
         participants: finalParticipants,
         maxParticipants,
+        activeLine: finalSession.activeLine ?? null,
       },
     });
   } catch (error) {

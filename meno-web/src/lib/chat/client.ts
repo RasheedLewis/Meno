@@ -1,5 +1,7 @@
 import type { ParticipantRole } from "@/lib/store/session";
+import type { ActiveLineLease } from "@/lib/store/session";
 import { useChatStore } from "@/lib/store/chat";
+import { useSessionStore } from "@/lib/store/session";
 import type { ChatMessage } from "@/lib/types/chat";
 
 interface ConnectConfig {
@@ -16,20 +18,31 @@ interface SendOptions {
   meta?: ChatMessage["meta"];
 }
 
+interface ControlActiveLineSetOptions {
+  stepIndex: number | null;
+  leaseTo?: string | null;
+  leaseDurationMs?: number;
+}
+
 type ServerEvent =
   | {
-      type: "chat.sync";
-      sessionId: string;
-      messages: ChatMessage[];
-    }
+    type: "chat.sync";
+    sessionId: string;
+    messages: ChatMessage[];
+  }
   | {
-      type: "chat.message";
-      sessionId: string;
-      message: ChatMessage;
-    };
+    type: "chat.message";
+    sessionId: string;
+    message: ChatMessage;
+  }
+  | {
+    type: "control.activeLine";
+    sessionId: string;
+    activeLine: ActiveLineLease | null;
+  };
 
 let socket: WebSocket | null = null;
-const outbox: SendOptions[] = [];
+const outbox: string[] = [];
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let lastConfig: ConnectConfig | null = null;
 
@@ -51,21 +64,21 @@ const flushOutbox = () => {
   while (outbox.length > 0) {
     const next = outbox.shift();
     if (!next) break;
-    socket.send(
-      JSON.stringify({
-        type: "chat.send",
-        id: next.id,
-        content: next.content,
-        role: next.role,
-        meta: next.meta,
-      }),
-    );
+    socket.send(next);
   }
 };
 
 const send = (options: SendOptions) => {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
-    outbox.push(options);
+    outbox.push(
+      JSON.stringify({
+        type: "chat.send",
+        id: options.id,
+        content: options.content,
+        role: options.role,
+        meta: options.meta,
+      }),
+    );
     return;
   }
   socket.send(
@@ -77,6 +90,23 @@ const send = (options: SendOptions) => {
       meta: options.meta,
     }),
   );
+};
+
+const sendControlActiveLine = (payload: ControlActiveLineSetOptions | { clear: true }) => {
+  const message =
+    "clear" in payload && payload.clear
+      ? JSON.stringify({ type: "control.activeLine.clear" })
+      : JSON.stringify({
+        type: "control.activeLine.set",
+        stepIndex: payload.stepIndex,
+        leaseDurationMs: payload.leaseDurationMs,
+        ...(payload.leaseTo !== undefined ? { leaseTo: payload.leaseTo } : {}),
+      });
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    outbox.push(message);
+    return;
+  }
+  socket.send(message);
 };
 
 const scheduleReconnect = () => {
@@ -109,6 +139,8 @@ export const chatClient = {
           useChatStore.getState().setMessages(payload.messages);
         } else if (payload.type === "chat.message") {
           useChatStore.getState().addMessage(payload.message);
+        } else if (payload.type === "control.activeLine") {
+          useSessionStore.getState().setActiveLine(payload.activeLine ?? null);
         }
       } catch (error) {
         console.error("Failed to parse chat event", error);
@@ -143,5 +175,13 @@ export const chatClient = {
 
   sendMessage: (options: SendOptions) => {
     send(options);
+  },
+
+  setActiveLine: (options: ControlActiveLineSetOptions) => {
+    sendControlActiveLine(options);
+  },
+
+  clearActiveLine: () => {
+    sendControlActiveLine({ clear: true });
   },
 };

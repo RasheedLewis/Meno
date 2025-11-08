@@ -7,6 +7,14 @@ export type ParticipantRole = "student" | "teacher" | "observer";
 export type SessionPhase = "idle" | "joining" | "active" | "completed";
 export type SessionDifficulty = "beginner" | "intermediate" | "advanced";
 
+export interface ActiveLineLease {
+  leaseId: string;
+  stepIndex: number | null;
+  leaseTo: string | null;
+  leaseIssuedAt: string;
+  leaseExpiresAt: number;
+}
+
 export interface Participant {
   id: string;
   name: string;
@@ -28,6 +36,7 @@ interface SessionState {
   hspPlan?: HspPlan | null;
   isLoading: boolean;
   error: string | null;
+  activeLine: ActiveLineLease | null;
   setSessionId: (sessionId: string | null) => void;
   setSessionCode: (sessionCode: string | null) => void;
   setParticipant: (payload: {
@@ -46,12 +55,14 @@ interface SessionState {
   setHspPlan: (plan: HspPlan | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (message: string | null) => void;
+  setActiveLine: (next: ActiveLineLease | null) => void;
   hydrateFromServer: (payload: {
     sessionId: string;
     code?: string | null;
     sessionName?: string | null;
     difficulty?: SessionDifficulty | null;
     participants?: Participant[];
+    activeLine?: ActiveLineLease | null;
   }) => void;
   resetSession: () => void;
 }
@@ -70,6 +81,7 @@ type SessionBaseState = {
   hspPlan?: HspPlan | null;
   isLoading: boolean;
   error: string | null;
+  activeLine: ActiveLineLease | null;
 };
 
 const baseSession: SessionBaseState = {
@@ -86,6 +98,7 @@ const baseSession: SessionBaseState = {
   hspPlan: null,
   isLoading: false,
   error: null,
+  activeLine: null,
 };
 
 export const useSessionStore = create<SessionState>()(
@@ -129,15 +142,17 @@ export const useSessionStore = create<SessionState>()(
         }),
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
-      hydrateFromServer: ({ sessionId, code, sessionName, difficulty, participants }) =>
+      setActiveLine: (activeLine) => set({ activeLine }),
+      hydrateFromServer: ({ sessionId, code, sessionName, difficulty, participants, activeLine }) =>
         set((state) => ({
           sessionId,
           sessionCode: code ?? state.sessionCode,
           sessionName: sessionName ?? state.sessionName,
           difficulty: difficulty ?? state.difficulty,
           participants: participants ?? state.participants,
+          activeLine: activeLine ?? state.activeLine,
         })),
-      resetSession: () => set({ ...baseSession, participants: [] }),
+      resetSession: () => set({ ...baseSession }),
     }),
     {
       name: "meno-session",
@@ -151,6 +166,7 @@ export const useSessionStore = create<SessionState>()(
         role: state.role,
         difficulty: state.difficulty,
         hspPlanId: state.hspPlanId,
+        activeLine: state.activeLine,
       }),
     },
   ),
