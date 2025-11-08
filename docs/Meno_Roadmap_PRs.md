@@ -202,6 +202,28 @@ Paths assume a Next.js + TypeScript web app using the `/app` directory and `page
 
 ---
 
+## PR-10d: Unified Realtime Channel via Y-WebSocket
+
+**Goal:** Migrate chat, presence, and lease control from the Next.js WebSocket to the existing y-websocket transport.
+
+**Subtasks**
+- [ ] Define shared realtime message constants/types (chat, presence, control).
+- [ ] Extend `yws` server handler to intercept custom packets before `setupWSConnection`.
+- [ ] Persist chat/presence payloads to Dynamo within the y-websocket server.
+- [ ] Replay chat history + presence roster on client reconnect.
+- [ ] Update web client providers to send/receive custom packets over y-websocket.
+- [ ] Remove legacy chat/presence websocket client + server routes.
+
+**Files**
+- (M) `src/pages/api/yws/[sessionId].ts` — custom transport handler + Dynamo wiring
+- (M) `src/lib/realtime/messages.ts` — shared message IDs + codecs
+- (M) `src/lib/store/chat.ts` — consume y-websocket events
+- (M) `src/lib/store/presence.ts` — hydrate from unified channel
+- (M) `src/lib/chat/client.ts`, `src/lib/presence/client.ts` — deprecate/remove
+- (M) `docs/PR_10_Tablet.md` — timeline for lease + solver gating follow-up
+
+---
+
 ## PR-11: Voice Input (STT) — WebRTC Uplink
 
 **Goal:** Students speak; streaming STT returns partials with timestamps + diarization.

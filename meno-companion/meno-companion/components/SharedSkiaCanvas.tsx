@@ -28,6 +28,8 @@ interface SharedSkiaCanvasProps {
   localDisplayName?: string;
   onPointerUpdate: (point: CanvasPoint | null) => void;
   activeStepIndex?: number | null;
+  canDraw?: boolean;
+  disabledReason?: string;
 }
 
 const CANVAS_BACKGROUND = '#FFFFFF';
@@ -46,6 +48,8 @@ export default function SharedSkiaCanvas({
   localDisplayName,
   onPointerUpdate,
   activeStepIndex,
+  canDraw = true,
+  disabledReason,
 }: SharedSkiaCanvasProps) {
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [remotePointers, setRemotePointers] = useState<PointerState[]>([]);
@@ -75,9 +79,10 @@ export default function SharedSkiaCanvas({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponder: () => canDraw,
+        onMoveShouldSetPanResponder: () => canDraw,
         onPanResponderGrant: (event) => {
+          if (!canDraw) return;
           const { locationX, locationY } = event.nativeEvent;
           if (size.width === 0 || size.height === 0) return;
           const point = {
@@ -93,6 +98,7 @@ export default function SharedSkiaCanvas({
           }
         },
         onPanResponderMove: (event) => {
+          if (!canDraw) return;
           const { locationX, locationY } = event.nativeEvent;
           if (size.width === 0 || size.height === 0) return;
           const point = {
@@ -105,6 +111,7 @@ export default function SharedSkiaCanvas({
           }
         },
         onPanResponderRelease: () => {
+          if (!canDraw) return;
           if (currentStrokeId.current) {
             endStroke(currentStrokeId.current);
             currentStrokeId.current = null;
@@ -112,6 +119,7 @@ export default function SharedSkiaCanvas({
           onPointerUpdate(null);
         },
         onPanResponderTerminate: () => {
+          if (!canDraw) return;
           if (currentStrokeId.current) {
             cancelStroke(currentStrokeId.current);
             currentStrokeId.current = null;
@@ -119,7 +127,7 @@ export default function SharedSkiaCanvas({
           onPointerUpdate(null);
         },
       }),
-    [appendToStroke, beginStroke, cancelStroke, endStroke, onPointerUpdate, size.height, size.width],
+    [appendToStroke, beginStroke, cancelStroke, canDraw, endStroke, onPointerUpdate, size.height, size.width],
   );
 
   const paths = useMemo(() => {
@@ -235,10 +243,20 @@ export default function SharedSkiaCanvas({
       {remotePointerElements}
 
       <View style={styles.controls}>
-        <TouchableOpacity style={styles.controlButton} onPress={onClear} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[styles.controlButton, !canDraw && styles.controlButtonDisabled]}
+          onPress={onClear}
+          activeOpacity={0.8}
+          disabled={!canDraw}
+        >
           <Text style={styles.controlText}>Clear</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.controlButton} onPress={onEraseLast} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[styles.controlButton, !canDraw && styles.controlButtonDisabled]}
+          onPress={onEraseLast}
+          activeOpacity={0.8}
+          disabled={!canDraw}
+        >
           <Text style={styles.controlText}>Undo</Text>
         </TouchableOpacity>
       </View>
@@ -246,6 +264,12 @@ export default function SharedSkiaCanvas({
       <View style={[styles.participantBadge, { borderColor: pointerColor }]}>
         <Text style={[styles.participantText, { color: pointerColor }]}>{localDisplayName ?? localParticipantId ?? 'You'}</Text>
       </View>
+
+      {!canDraw && disabledReason ? (
+        <View style={styles.disabledOverlay} pointerEvents="none">
+          <Text style={styles.disabledText}>{disabledReason}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -275,6 +299,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1,
     borderColor: 'rgba(15, 23, 42, 0.08)',
+  },
+  controlButtonDisabled: {
+    opacity: 0.4,
   },
   controlText: {
     fontSize: 12,
@@ -327,6 +354,21 @@ const styles = StyleSheet.create({
   participantText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  disabledOverlay: {
+    position: 'absolute',
+    inset: 0,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(248,250,252,0.78)',
+  },
+  disabledText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+    textAlign: 'center',
   },
 });
 

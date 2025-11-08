@@ -7,6 +7,7 @@ import SharedSkiaCanvas from '@/components/SharedSkiaCanvas';
 import { ThemedText } from '@/components/themed-text';
 import { useSharedCanvas } from '@/hooks/use-shared-canvas';
 import { useSessionYjs } from '@/hooks/use-session-yjs';
+import { useChatControl } from '@/hooks/use-chat-control';
 import { randomId } from '@/lib/randomId';
 
 export default function SessionScreen() {
@@ -42,6 +43,13 @@ export default function SessionScreen() {
     participantId: localParticipantId ?? undefined,
   });
 
+  const activeLine = useChatControl({
+    sessionId,
+    participantId: localParticipantId,
+    name: displayName,
+    role: 'companion',
+  });
+
   const {
     strokes,
     beginStroke,
@@ -63,6 +71,15 @@ export default function SessionScreen() {
       }),
     [beginStroke, identityColor, localParticipantId],
   );
+
+  const canDraw =
+    !!localParticipantId &&
+    (!activeLine?.leaseTo || activeLine.leaseTo === localParticipantId);
+
+  const disabledReason =
+    !canDraw && activeLine?.leaseExpiresAt
+      ? `Waiting for host… (${Math.max(0, Math.floor((activeLine.leaseExpiresAt - Date.now()) / 1000))}s)`
+      : undefined;
 
   const handleEraseLast = useCallback(() => {
     const last = strokes.at(-1);
@@ -129,6 +146,9 @@ export default function SessionScreen() {
         localParticipantId={localParticipantId ?? 'companion'}
         localDisplayName={displayName}
         onPointerUpdate={handlePointerUpdate}
+        activeStepIndex={activeLine?.stepIndex ?? null}
+        canDraw={canDraw}
+        disabledReason={disabledReason}
       />
     </View>
   );

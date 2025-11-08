@@ -166,7 +166,7 @@ export default function ChatDemoPage() {
       <UploadSheet open={uploadOpen} onClose={() => setUploadOpen(false)} />
 
       <ChatToggle open={chatOpen} onToggle={() => setChatOpen((value) => !value)} />
-      {chatOpen ? <ChatDrawer onClose={() => setChatOpen(false)} /> : null}
+      <ChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
     </div>
   );
 }
@@ -277,10 +277,20 @@ function ChatToggle({ open, onToggle }: { open: boolean; onToggle: () => void })
   );
 }
 
-function ChatDrawer({ onClose }: { onClose: () => void }) {
+function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-8">
-      <div className="w-full max-w-4xl rounded-3xl border border-[var(--border)] bg-[var(--paper)]/95 p-4 shadow-strong backdrop-blur">
+    <div
+      className={`fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-8 transition-all duration-300 ${
+        open ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-6 opacity-0"
+      }`}
+      aria-hidden={!open}
+    >
+      <div
+        className="w-full max-w-4xl rounded-3xl border border-[var(--border)] bg-[var(--paper)]/95 p-4 shadow-strong backdrop-blur"
+        role={open ? "dialog" : undefined}
+        aria-modal={open ? "true" : undefined}
+        aria-label={open ? "Dialogue chat" : undefined}
+      >
         <div className="flex items-center justify-between">
           <h2 className="font-serif text-lg text-[var(--ink)]">Dialogue</h2>
           <Button variant="ghost" size="sm" onClick={onClose}>

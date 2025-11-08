@@ -6,7 +6,10 @@ import { ensureSessionDoc, getStrokesArray } from "@/lib/whiteboard/sessionDoc";
 type Doc = import("yjs").Doc;
 type WebsocketProvider = import("y-websocket").WebsocketProvider;
 type Awareness = import("y-protocols/awareness").Awareness;
-type IndexeddbPersistence = import("y-indexeddb").IndexeddbPersistence;
+type IndexeddbPersistence = {
+  destroy?: () => void;
+  whenSynced?: Promise<unknown>;
+};
 
 export interface YjsConnection {
   doc: Doc;

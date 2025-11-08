@@ -110,16 +110,16 @@ export function ChatPane({ className }: { className?: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, planId]);
 
+  const skippedFirstCleanupRef = useRef(false);
+
   useEffect(() => {
     if (!sessionId || !participantId || !participantName) {
-      presenceClient.disconnect();
-      chatClient.disconnect();
       return;
     }
 
     presenceClient.connect({
-      sessionId: sessionId ?? undefined,
-      participantId: participantId ?? undefined,
+      sessionId,
+      participantId,
       name: participantName,
       role: participantRole,
     });
@@ -131,6 +131,10 @@ export function ChatPane({ className }: { className?: string }) {
     });
 
     return () => {
+      if (!skippedFirstCleanupRef.current) {
+        skippedFirstCleanupRef.current = true;
+        return;
+      }
       presenceClient.disconnect();
       chatClient.disconnect();
       if (typingTimerRef.current) {

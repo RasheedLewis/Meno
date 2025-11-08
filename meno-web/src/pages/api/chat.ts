@@ -104,7 +104,13 @@ const createServer = (server: HTTPServer): ChatServer => {
 
     socket.on("close", (code, reason) => {
       const text = Buffer.isBuffer(reason) ? reason.toString("utf8") : String(reason ?? "");
-      console.log("[chat] connection closed", { code, reason: text });
+      const internal = {
+        closeFrameSent: (socket as WebSocket & { _closeFrameSent?: boolean })._closeFrameSent ?? false,
+        closeFrameReceived: (socket as WebSocket & { _closeFrameReceived?: boolean })._closeFrameReceived ?? false,
+        readyState: socket.readyState,
+      };
+      console.log("[chat] connection closed", { code, reason: text, internal });
+      console.log("[chat] close stack", new Error().stack);
     });
 
     socket.on("error", (error) => {
@@ -124,8 +130,13 @@ const createServer = (server: HTTPServer): ChatServer => {
     socket.meta = { sessionId, participantId, name, role };
     register(sessionId, socket);
 
+    console.log("[chat] hydrate start", { sessionId });
+
+    const startTime = Date.now();
+
     try {
       const history = await listChatMessages(sessionId, 200);
+      console.log("[chat] hydrate history ok", { count: history.length, durationMs: Date.now() - startTime });
       socket.send(
         JSON.stringify({
           type: "chat.sync",
@@ -135,10 +146,14 @@ const createServer = (server: HTTPServer): ChatServer => {
       );
     } catch (error) {
       console.error("Chat history load failed", error);
+      const message = error instanceof Error ? error.message : "Unknown chat history error";
+      socket.close(1011, `chat history load failed: ${message}`);
+      return;
     }
 
     try {
       const session = await getSessionById(sessionId);
+      console.log("[chat] hydrate active line ok", { hasActiveLine: Boolean(session?.activeLine), durationMs: Date.now() - startTime });
       socket.send(
         JSON.stringify({
           type: "control.activeLine",
@@ -148,7 +163,12 @@ const createServer = (server: HTTPServer): ChatServer => {
       );
     } catch (error) {
       console.error("Failed to load active line state", error);
+      const message = error instanceof Error ? error.message : "Unknown active line error";
+      socket.close(1011, `active line load failed: ${message}`);
+      return;
     }
+
+    console.log("[chat] hydrate complete", { sessionId, durationMs: Date.now() - startTime });
 
     socket.on("message", async (raw) => {
       try {

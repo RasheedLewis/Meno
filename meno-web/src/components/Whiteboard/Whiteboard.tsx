@@ -76,6 +76,13 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
 
   const [leaseCountdown, setLeaseCountdown] = useState<number>(0);
 
+  const canDraw = !activeLine?.leaseTo || activeLine.leaseTo === localParticipantId;
+  const drawDisabledReason = !canDraw
+    ? leaseHolderName
+      ? `Waiting for ${leaseHolderName} to finish…${leaseCountdown > 0 ? ` (${leaseCountdown}s)` : ""}`
+      : "Waiting for control to be granted."
+    : undefined;
+
   useEffect(() => {
     if (!activeLine) {
       setLeaseCountdown(0);
@@ -94,16 +101,17 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
   }, [activeLine?.leaseId, activeLine?.leaseExpiresAt, setActiveLineState]);
 
   const handleTakeControl = useCallback(() => {
-    if (!localParticipantId) return;
+    if (!localParticipantId || activeLine?.leaseTo === localParticipantId) return;
     chatClient.setActiveLine({
-      stepIndex: activeLine?.stepIndex ?? null,
+      stepIndex: activeLine?.stepIndex ?? 0,
       leaseTo: localParticipantId,
     });
-  }, [activeLine?.stepIndex, localParticipantId]);
+  }, [activeLine?.leaseTo, activeLine?.stepIndex, localParticipantId]);
 
   const handleReleaseControl = useCallback(() => {
+    if (activeLine?.leaseTo !== localParticipantId) return;
     chatClient.clearActiveLine();
-  }, []);
+  }, [activeLine?.leaseTo, localParticipantId]);
 
   const yjsConnection = useYjs(sessionId);
   const {
@@ -151,15 +159,17 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
   );
 
   const handleClear = useCallback(() => {
+    if (!canDraw) return;
     clearInternal();
-  }, [clearInternal]);
+  }, [canDraw, clearInternal]);
 
   const handleEraseLast = useCallback(() => {
+    if (!canDraw) return;
     const last = strokes.at(-1);
     if (last) {
       eraseStrokeInternal(last.id);
     }
-  }, [eraseStrokeInternal, strokes]);
+  }, [canDraw, eraseStrokeInternal, strokes]);
 
   const updatePointer = useCallback(
     (pointer: CanvasPoint | null) => {
@@ -346,9 +356,11 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
         pointerColor={localColor}
         awareness={awareness}
         localParticipantId={localParticipantId}
-      localDisplayName={localDisplayName}
+        localDisplayName={localDisplayName}
         onPointerUpdate={updatePointer}
         activeStepIndex={activeLine?.stepIndex ?? null}
+        canDraw={canDraw}
+        disabledReason={drawDisabledReason}
       />
       {sessionId && localParticipantId ? (
         <div className="pointer-events-none absolute top-4 right-4 flex flex-col items-end gap-2">
@@ -378,8 +390,8 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
                 <span>Line available</span>
               )}
             </span>
-            {activeLine && activeLine.leaseTo === localParticipantId && leaseCountdown > 0 ? (
-              <Button variant="ghost" size="sm" onClick={handleReleaseControl}>
+            {activeLine && activeLine.leaseTo === localParticipantId ? (
+              <Button variant="ghost" size="sm" onClick={handleReleaseControl} disabled={activeLine.leaseTo !== localParticipantId}>
                 Release
               </Button>
             ) : (
@@ -387,7 +399,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
                 variant="primary"
                 size="sm"
                 onClick={handleTakeControl}
-                disabled={!localParticipantId}
+                disabled={!localParticipantId || activeLine?.leaseTo === localParticipantId}
               >
                 Take Control
               </Button>

@@ -27,12 +27,17 @@ export const usePresenceStore = create<PresenceState>((set) => ({
     setParticipants: (participants, typingSummary, typingIds) =>
         set(() => {
             const offlineStatuses = new Set(["disconnected"]);
-            const sessionParticipants = participants.map((participant) => ({
-                id: participant.participantId,
-                name: participant.name,
-                role: participant.role,
-                presence: offlineStatuses.has(participant.status) ? "offline" : "online",
-            }));
+            const sessionParticipants = participants.map((participant) => {
+                const presenceStatus: "online" | "offline" = offlineStatuses.has(participant.status)
+                    ? "offline"
+                    : "online";
+                return {
+                    id: participant.participantId,
+                    name: participant.name,
+                    role: participant.role,
+                    presence: presenceStatus,
+                };
+            });
 
             useSessionStore.getState().setParticipants(sessionParticipants);
 

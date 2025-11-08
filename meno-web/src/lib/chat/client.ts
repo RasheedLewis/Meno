@@ -165,6 +165,7 @@ export const chatClient = {
   },
 
   disconnect: () => {
+    console.trace("chatClient.disconnect");
     if (!socket) return;
     socket.close();
     socket = null;

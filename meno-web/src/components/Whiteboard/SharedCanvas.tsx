@@ -39,6 +39,8 @@ interface SharedCanvasProps {
   localDisplayName?: string;
   onPointerUpdate: (point: CanvasPoint | null) => void;
   activeStepIndex?: number | null;
+  canDraw?: boolean;
+  disabledReason?: string;
 }
 
 const CANVAS_BACKGROUND = "#FFFFFF";
@@ -58,6 +60,8 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
     localDisplayName,
     onPointerUpdate,
     activeStepIndex,
+    canDraw = true,
+    disabledReason,
   },
   ref,
 ) {
@@ -170,7 +174,7 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
       context.stroke();
     }
 
-    if (activeStepIndex !== null && activeStepIndex >= 0) {
+    if (typeof activeStepIndex === "number" && activeStepIndex >= 0) {
       const clampedIndex = Math.min(activeStepIndex, totalLines - 1);
       const y = Math.round((clampedIndex + 1) * lineGap) + 0.5;
       context.strokeStyle = pointerColor;
@@ -227,7 +231,12 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
 
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || !canDraw) {
+        if (!canDraw) {
+          onPointerUpdate(null);
+        }
+        return;
+      }
       event.preventDefault();
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -246,20 +255,20 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
         setIsDrawing(true);
       }
     },
-    [beginStroke, getNormalizedPoint, onPointerUpdate],
+    [beginStroke, canDraw, getNormalizedPoint, onPointerUpdate],
   );
 
   const handlePointerMove = useCallback(
     (event: PointerEvent) => {
       const point = getNormalizedPoint(event);
       onPointerUpdate(point);
-      if (!isDrawing || !currentStrokeId.current) {
+      if (!isDrawing || !currentStrokeId.current || !canDraw) {
         return;
       }
       event.preventDefault();
       appendToStroke(currentStrokeId.current, [point]);
     },
-    [appendToStroke, getNormalizedPoint, isDrawing, onPointerUpdate],
+    [appendToStroke, canDraw, getNormalizedPoint, isDrawing, onPointerUpdate],
   );
 
   const finishStroke = useCallback(
@@ -352,15 +361,17 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
       <div className="pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 gap-3">
         <button
           type="button"
-          className="pointer-events-auto rounded-full border border-[var(--border)] bg-[var(--paper)]/95 px-4 py-1.5 text-sm font-medium text-[var(--muted)] shadow-sm transition hover:bg-[var(--paper)]"
+          className="pointer-events-auto rounded-full border border-[var(--border)] bg-[var(--paper)]/95 px-4 py-1.5 text-sm font-medium text-[var(--muted)] shadow-sm transition hover:bg-[var(--paper)] disabled:pointer-events-none disabled:opacity-45"
           onClick={onEraseLast}
+          disabled={!canDraw}
         >
           Undo
         </button>
         <button
           type="button"
-          className="pointer-events-auto rounded-full border border-[var(--border)] bg-[var(--paper)]/95 px-4 py-1.5 text-sm font-medium text-[var(--muted)] shadow-sm transition hover:bg-[var(--paper)]"
+          className="pointer-events-auto rounded-full border border-[var(--border)] bg-[var(--paper)]/95 px-4 py-1.5 text-sm font-medium text-[var(--muted)] shadow-sm transition hover:bg-[var(--paper)] disabled:pointer-events-none disabled:opacity-45"
           onClick={onClear}
+          disabled={!canDraw}
         >
           Clear
         </button>
@@ -382,6 +393,13 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
       >
         Brush ~{Math.round(Math.max(baseDimension * 0.015, 5))} px
       </div>
+      {!canDraw && disabledReason ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]/95 px-5 py-3 text-sm text-[var(--muted)] shadow-strong backdrop-blur">
+            {disabledReason}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 });
