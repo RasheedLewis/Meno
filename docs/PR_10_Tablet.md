@@ -62,12 +62,21 @@ Enable a shared real-time handwriting workspace between the **web app** (host/te
 
 **Goal:** Let tablet join a web session.
 
-* Host can **create session** (`/sessions/new`).
-* Host shows QR with join token.
+* Host can **create session** (`/sessions/new`) and share session code.
+* Tablet joins via code entry (QR/JWT deferred).
+* Yjs + chat/presence sockets auto-connect when session is active.
+* Presence list shows avatars, names, tool state; latency indicator deferred.
+* **Tests:** reconnect flow, code reuse TTL, expired session rejection.
+
+---
+
+### PR-10c.1 — Join Tokens & Deep Link (Future)
+
+* Host shows QR with **join token** (JWT).
 * Tablet scans → deep-link `meno://join?sid=<sessionId>&jt=<JWT>`.
-* WebSocket auto-joins Yjs doc + control stream.
-* Presence list shows avatars, latency, tool state.
-* **Tests:** token TTLs, reconnect flow, expired session rejection.
+* Enforce token TTL, role binding, single-use semantics.
+* Presence/lease streams honor JWT roles.
+* **Tests:** token TTLs, reconnect flow with JWT, expired token rejection.
 
 ---
 
