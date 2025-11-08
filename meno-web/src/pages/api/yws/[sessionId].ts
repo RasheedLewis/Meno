@@ -12,6 +12,7 @@ import {
     type RealtimeChatAppendPayload,
     type RealtimePresenceEventPayload,
     type RealtimePresenceParticipant,
+    type RealtimeControlLeaseRequestPayload,
 } from "@/lib/realtime/messages";
 import { persistChatMessage, listChatMessages } from "@/lib/chat/store";
 import {
@@ -22,6 +23,11 @@ import {
 } from "@/lib/presence/store";
 import type { PresenceRecord } from "@/lib/presence/types";
 import type { ChatMessage } from "@/lib/types/chat";
+import {
+    setActiveLineLease,
+    clearActiveLineLease,
+    getSessionById,
+} from "@/lib/session/store";
 
 type SessionConnections = Map<string, Set<WebSocket>>;
 
@@ -261,6 +267,33 @@ const handleRealtimeClientMessage = (
             return true;
         }
 
+        if (messageType === REALTIME_MESSAGE_TYPE.CONTROL_LEASE_REQUEST && parsedPayload) {
+            const { stepIndex, leaseTo, leaseDurationMs } = parsedPayload as RealtimeControlLeaseRequestPayload;
+
+            const perform = async () => {
+                try {
+                    const updated =
+                        stepIndex === null || stepIndex === undefined
+                            ? await clearActiveLineLease(sessionId)
+                            : await setActiveLineLease(sessionId, {
+                                  stepIndex,
+                                  leaseTo: leaseTo ?? null,
+                                  leaseDurationMs,
+                              });
+
+                    broadcastRealtimeMessage(sessionId, state, REALTIME_MESSAGE_TYPE.CONTROL_LEASE_STATE, {
+                        sessionId,
+                        activeLine: updated?.activeLine ?? null,
+                    });
+                } catch (error) {
+                    console.error("[YWS] control lease request failed", { sessionId, error });
+                }
+            };
+
+            void perform();
+            return true;
+        }
+
         return true;
     } catch (error) {
         console.error("[YWS] failed to decode realtime message", { sessionId, error });
@@ -276,9 +309,10 @@ const computeTypingSummary = (participants: RealtimePresenceParticipant[]) => {
 
 const hydrateConnection = async (sessionId: string, ws: WebSocket) => {
     try {
-        const [messages, presence] = await Promise.all([
+        const [messages, presence, session] = await Promise.all([
             listChatMessages(sessionId, 200),
             listPresence(sessionId),
+            getSessionById(sessionId),
         ]);
 
         await sendRealtimeServerMessage(ws, REALTIME_MESSAGE_TYPE.CHAT_SYNC, {
@@ -297,6 +331,11 @@ const hydrateConnection = async (sessionId: string, ws: WebSocket) => {
             participants,
             typingSummary,
             typingIds,
+        });
+
+        await sendRealtimeServerMessage(ws, REALTIME_MESSAGE_TYPE.CONTROL_LEASE_STATE, {
+            sessionId,
+            activeLine: session?.activeLine ?? null,
         });
     } catch (error) {
         console.error("[YWS] failed to hydrate connection", { sessionId, error });
