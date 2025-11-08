@@ -15,6 +15,7 @@ import type { CanvasPoint, SharedStroke } from "@/lib/canvas/types";
 interface PointerState {
   id: number;
   participantId?: string;
+  displayName?: string;
   role?: string;
   color?: string;
   point?: CanvasPoint | null;
@@ -35,6 +36,7 @@ interface SharedCanvasProps {
   pointerColor: string;
   awareness: Awareness | null;
   localParticipantId?: string | null;
+  localDisplayName?: string;
   onPointerUpdate: (point: CanvasPoint | null) => void;
 }
 
@@ -52,6 +54,7 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
     pointerColor,
     awareness,
     localParticipantId,
+    localDisplayName,
     onPointerUpdate,
   },
   ref,
@@ -91,6 +94,7 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
       const entries = Array.from(awareness.getStates().entries()).map(([id, state]) => ({
         id,
         participantId: (state as PointerState & { participantId?: string }).participantId,
+        displayName: (state as PointerState & { displayName?: string }).displayName,
         role: (state as PointerState & { role?: string }).role,
         color: (state as PointerState & { color?: string }).color,
         point: (state as PointerState & { pointer?: CanvasPoint }).pointer ?? null,
@@ -292,13 +296,15 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
           className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
           style={{ left: x, top: y }}
         >
-          <div
-            className="h-3 w-3 rounded-full border border-white shadow-sm"
-            style={{ backgroundColor: pointer.color ?? "#4F46E5" }}
-          />
-          {pointer.participantId ? (
-            <span className="whitespace-nowrap rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
-              {pointer.participantId}
+          {pointer.displayName ?? pointer.participantId ? (
+            <span
+              className="whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium text-white shadow-sm"
+              style={{
+                backgroundColor: pointer.color ?? "#4F46E5",
+              }}
+            >
+              <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full border border-white/60" />
+              {pointer.displayName ?? pointer.participantId}
             </span>
           ) : null}
         </div>
@@ -331,10 +337,14 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
       </div>
 
       <div
-        className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-white/50 bg-[var(--paper)]/85 px-3 py-1 text-xs text-[var(--muted)] shadow-sm backdrop-blur"
+        className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-2 rounded-full border border-white/50 bg-[var(--paper)]/85 px-3 py-1 text-xs text-[var(--muted)] shadow-sm backdrop-blur"
         style={{ color: pointerColor }}
       >
-        {localParticipantId ?? "You"}
+        <span
+          className="inline-block h-2.5 w-2.5 rounded-full border border-white/70 shadow"
+          style={{ backgroundColor: pointerColor }}
+        />
+        {localDisplayName ?? localParticipantId ?? "You"}
       </div>
       <div
         className="pointer-events-none absolute bottom-4 right-4 rounded-full border border-white/50 bg-[var(--paper)]/85 px-3 py-1 text-xs text-[var(--muted)] shadow-sm backdrop-blur"

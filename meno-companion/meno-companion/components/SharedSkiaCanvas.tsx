@@ -8,6 +8,7 @@ import type { CanvasPoint, SharedStroke } from '@/hooks/use-shared-canvas';
 interface PointerState {
   id: number;
   participantId?: string;
+  displayName?: string;
   role?: string;
   color?: string;
   point?: CanvasPoint | null;
@@ -24,6 +25,7 @@ interface SharedSkiaCanvasProps {
   pointerColor: string;
   awareness: Awareness | null;
   localParticipantId?: string | null;
+  localDisplayName?: string;
   onPointerUpdate: (point: CanvasPoint | null) => void;
 }
 
@@ -40,6 +42,7 @@ export default function SharedSkiaCanvas({
   pointerColor,
   awareness,
   localParticipantId,
+  localDisplayName,
   onPointerUpdate,
 }: SharedSkiaCanvasProps) {
   const [size, setSize] = useState({ width: 1, height: 1 });
@@ -55,6 +58,7 @@ export default function SharedSkiaCanvas({
       const entries = Array.from(awareness.getStates().entries()).map(([id, state]) => ({
         id,
         participantId: (state as PointerState & { participantId?: string }).participantId,
+        displayName: (state as PointerState & { displayName?: string }).displayName,
         role: (state as PointerState & { role?: string }).role,
         color: (state as PointerState & { color?: string }).color,
         point: (state as PointerState & { pointer?: CanvasPoint }).pointer ?? null,
@@ -166,9 +170,26 @@ export default function SharedSkiaCanvas({
               },
             ]}
           />
-          {pointer.participantId ? (
-            <Text style={styles.pointerLabel}>{pointer.participantId}</Text>
-          ) : null}
+      {pointer.displayName ?? pointer.participantId ? (
+        <View
+          style={[
+            styles.pointerLabel,
+            {
+              backgroundColor: pointer.color ?? '#4F46E5',
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.pointerLabelDot,
+              {
+                borderColor: 'rgba(255,255,255,0.75)',
+              },
+            ]}
+          />
+          <Text style={styles.pointerLabelText}>{pointer.displayName ?? pointer.participantId}</Text>
+        </View>
+      ) : null}
         </View>
       );
     });
@@ -199,7 +220,7 @@ export default function SharedSkiaCanvas({
       </View>
 
       <View style={[styles.participantBadge, { borderColor: pointerColor }]}>
-        <Text style={[styles.participantText, { color: pointerColor }]}>{localParticipantId ?? 'You'}</Text>
+        <Text style={[styles.participantText, { color: pointerColor }]}>{localDisplayName ?? localParticipantId ?? 'You'}</Text>
       </View>
     </View>
   );
@@ -250,12 +271,24 @@ const styles = StyleSheet.create({
   },
   pointerLabel: {
     marginTop: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(15,23,42,0.85)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  pointerLabelDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  pointerLabelText: {
     fontSize: 10,
     color: '#FFFFFF',
-    backgroundColor: 'rgba(15,23,42,0.8)',
+    fontWeight: '600',
   },
   participantBadge: {
     position: 'absolute',

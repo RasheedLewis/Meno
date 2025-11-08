@@ -36,12 +36,22 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
 ) {
   const presenceParticipants = usePresenceStore((state) => state.participants);
   const localParticipantId = useSessionStore((state) => state.participantId);
+  const participantName = useSessionStore((state) => state.participantName);
+  const sessionParticipants = useSessionStore((state) => state.participants);
   const sessionId = useSessionStore((state) => state.sessionId);
 
   const localColor = useMemo(() => {
     const record = presenceParticipants.find((participant) => participant.participantId === localParticipantId);
     return record?.color ?? "#2B8A9C";
   }, [localParticipantId, presenceParticipants]);
+
+  const localDisplayName = useMemo(() => {
+    if (participantName?.trim()) {
+      return participantName;
+    }
+    const match = sessionParticipants.find((participant) => participant.id === localParticipantId);
+    return match?.name ?? "You";
+  }, [participantName, sessionParticipants, localParticipantId]);
 
   const yjsConnection = useYjs(sessionId);
   const {
@@ -108,12 +118,13 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
         pointer,
         color: localColor,
         participantId: localParticipantId ?? undefined,
+        displayName: localDisplayName,
         role: "host",
         client: "web",
         updatedAt: Date.now(),
       });
     },
-    [awareness, localColor, localParticipantId],
+    [awareness, localColor, localParticipantId, localDisplayName],
   );
 
   useEffect(() => {
@@ -124,11 +135,12 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
       pointer: null,
       color: localColor,
       participantId: localParticipantId ?? undefined,
+      displayName: localDisplayName,
       role: "host",
       client: "web",
       updatedAt: Date.now(),
     });
-  }, [awareness, localColor, localParticipantId]);
+  }, [awareness, localColor, localParticipantId, localDisplayName]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -282,6 +294,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
         pointerColor={localColor}
         awareness={awareness}
         localParticipantId={localParticipantId}
+      localDisplayName={localDisplayName}
         onPointerUpdate={updatePointer}
       />
     </div>

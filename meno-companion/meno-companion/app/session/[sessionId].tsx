@@ -14,6 +14,7 @@ export default function SessionScreen() {
   const sessionId = typeof params.sessionId === 'string' ? params.sessionId : null;
 
   const identityColor = '#F97316';
+  const displayName = 'Tablet Companion';
   const [localParticipantId, setLocalParticipantId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,10 +82,11 @@ export default function SessionScreen() {
       client: 'tablet',
       color: identityColor,
       participantId: localParticipantId ?? 'companion',
+      displayName,
       pointer: pointerState,
       updatedAt: Date.now(),
     });
-  }, [connection?.awareness, identityColor, pointerState, localParticipantId]);
+  }, [connection?.awareness, identityColor, pointerState, localParticipantId, displayName]);
 
   const handlePointerUpdate = useCallback(
     (point: { x: number; y: number } | null) => {
@@ -96,10 +98,11 @@ export default function SessionScreen() {
         pointer: point,
         color: identityColor,
         participantId: localParticipantId ?? 'companion',
+        displayName,
         updatedAt: Date.now(),
       });
     },
-    [connection?.awareness, identityColor, localParticipantId],
+    [connection?.awareness, identityColor, localParticipantId, displayName],
   );
 
   if (!connection) {
@@ -124,6 +127,7 @@ export default function SessionScreen() {
         pointerColor={identityColor}
         awareness={awareness}
         localParticipantId={localParticipantId ?? 'companion'}
+        localDisplayName={displayName}
         onPointerUpdate={handlePointerUpdate}
       />
     </View>
