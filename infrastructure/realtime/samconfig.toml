@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "meno-realtime-websocket"
+s3_prefix = "meno-realtime-websocket"
+confirm_changeset = true
+capabilities = "CAPABILITY_NAMED_IAM"
+disable_rollback = true
+parameter_overrides = "ServiceName=\"meno-realtime\" StageName=\"prod\" ChatTableName=\"meno-chat\" PresenceTableName=\"meno-presence\" SessionTableName=\"meno-session\" ConnectionsTableName=\"meno-connections\" LambdaTimeout=\"10\""
+image_repositories = []
+
+[default.global.parameters]
+region = "us-east-2"

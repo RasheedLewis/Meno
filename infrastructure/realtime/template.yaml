@@ -1,0 +1,513 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Meno Realtime WebSocket infrastructure (API Gateway + Lambda).
+
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: meno-realtime-websocket
+    Description: WebSocket API for chat, presence, and lease control.
+
+Parameters:
+  ServiceName:
+    Type: String
+    Default: meno-realtime
+    Description: Logical service identifier (used for resource names and tags).
+  StageName:
+    Type: String
+    Default: prod
+    AllowedPattern: "^[a-z0-9-]+$"
+    Description: API Gateway deployment stage (e.g. dev, staging, prod).
+  ChatTableName:
+    Type: String
+    Description: Existing DynamoDB table that stores chat messages.
+  PresenceTableName:
+    Type: String
+    Description: Existing DynamoDB table that stores presence status.
+  SessionTableName:
+    Type: String
+    Description: Existing DynamoDB table that stores session metadata / leases.
+  ConnectionsTableName:
+    Type: String
+    Default: meno-connections
+    Description: DynamoDB table for active websocket connections (created by this stack).
+  LambdaTimeout:
+    Type: Number
+    Default: 10
+    MinValue: 3
+    MaxValue: 30
+    Description: Lambda timeout in seconds for realtime handlers.
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Handler: index.handler
+    Architectures:
+      - x86_64
+    MemorySize: 256
+    Timeout: !Ref LambdaTimeout
+    Tracing: Active
+    Environment:
+      Variables:
+        CHAT_TABLE_NAME: !Ref ChatTableName
+        PRESENCE_TABLE_NAME: !Ref PresenceTableName
+        SESSION_TABLE_NAME: !Ref SessionTableName
+        CONNECTIONS_TABLE_NAME: !Ref ConnectionsTableName
+        STAGE_NAME: !Ref StageName
+
+Resources:
+  ConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref ConnectionsTableName
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      AttributeDefinitions:
+        - AttributeName: sessionId
+          AttributeType: S
+        - AttributeName: connectionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sessionId
+          KeyType: HASH
+        - AttributeName: connectionId
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Service
+          Value: !Ref ServiceName
+
+  RealtimeWebSocket:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub ${ServiceName}-ws
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+      Description: Meno realtime chat/presence websocket.
+      Tags:
+        Service: !Ref ServiceName
+
+  RealtimeDeploymentStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      StageName: !Ref StageName
+      AutoDeploy: true
+      DefaultRouteSettings:
+        DetailedMetricsEnabled: true
+      Tags:
+        Service: !Ref ServiceName
+
+  ConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceName}-connect
+      CodeUri: ../../lambda/realtime/connect/
+      Description: Handles $connect route (validate + persist connection metadata).
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource:
+                - !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/@connections/*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:DescribeTable
+              Resource:
+                - !GetAtt ConnectionsTable.Arn
+  DisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceName}-disconnect
+      CodeUri: ../../lambda/realtime/disconnect/
+      Description: Handles $disconnect (cleanup connection + presence).
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PresenceTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource:
+                - !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/@connections/*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:DescribeTable
+              Resource:
+                - !GetAtt ConnectionsTable.Arn
+  DefaultFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceName}-default
+      CodeUri: ../../lambda/realtime/default/
+      Description: Fallback handler for unknown actions.
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource:
+                - !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/@connections/*
+  ChatSendFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceName}-chat-send
+      CodeUri: ../../lambda/realtime/chat-send/
+      Description: Handles chat.send action.
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChatTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource:
+                - !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/@connections/*
+  PresenceUpdateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceName}-presence-update
+      CodeUri: ../../lambda/realtime/presence-update/
+      Description: Handles presence.update action.
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PresenceTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource:
+                - !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/@connections/*
+  PresenceHeartbeatFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceName}-presence-heartbeat
+      CodeUri: ../../lambda/realtime/presence-heartbeat/
+      Description: Handles presence.heartbeat action.
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PresenceTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource:
+                - !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/@connections/*
+  LeaseSetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceName}-lease-set
+      CodeUri: ../../lambda/realtime/lease-set/
+      Description: Handles control.lease.set action.
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource:
+                - !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/@connections/*
+  LeaseReleaseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceName}-lease-release
+      CodeUri: ../../lambda/realtime/lease-release/
+      Description: Handles control.lease.release action.
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource:
+                - !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/@connections/*
+  PingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${ServiceName}-ping
+      CodeUri: ../../lambda/realtime/ping/
+      Description: Handles system.ping action.
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource:
+                - !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/@connections/*
+  ConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ConnectFunction.Arn}/invocations
+      PayloadFormatVersion: "1.0"
+
+  DisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DisconnectFunction.Arn}/invocations
+      PayloadFormatVersion: "1.0"
+
+  DefaultIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DefaultFunction.Arn}/invocations
+      PayloadFormatVersion: "1.0"
+
+  ChatSendIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ChatSendFunction.Arn}/invocations
+      PayloadFormatVersion: "1.0"
+
+  PresenceUpdateIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PresenceUpdateFunction.Arn}/invocations
+      PayloadFormatVersion: "1.0"
+
+  PresenceHeartbeatIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PresenceHeartbeatFunction.Arn}/invocations
+      PayloadFormatVersion: "1.0"
+
+  LeaseSetIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LeaseSetFunction.Arn}/invocations
+      PayloadFormatVersion: "1.0"
+
+  LeaseReleaseIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LeaseReleaseFunction.Arn}/invocations
+      PayloadFormatVersion: "1.0"
+
+  PingIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PingFunction.Arn}/invocations
+      PayloadFormatVersion: "1.0"
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      RouteKey: $connect
+      AuthorizationType: NONE
+      Target: !Sub integrations/${ConnectIntegration}
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      Target: !Sub integrations/${DisconnectIntegration}
+
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      RouteKey: $default
+      AuthorizationType: NONE
+      Target: !Sub integrations/${DefaultIntegration}
+
+  ChatSendRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      RouteKey: chat.send
+      AuthorizationType: NONE
+      Target: !Sub integrations/${ChatSendIntegration}
+
+  PresenceUpdateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      RouteKey: presence.update
+      AuthorizationType: NONE
+      Target: !Sub integrations/${PresenceUpdateIntegration}
+
+  PresenceHeartbeatRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      RouteKey: presence.heartbeat
+      AuthorizationType: NONE
+      Target: !Sub integrations/${PresenceHeartbeatIntegration}
+
+  LeaseSetRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      RouteKey: control.lease.set
+      AuthorizationType: NONE
+      Target: !Sub integrations/${LeaseSetIntegration}
+
+  LeaseReleaseRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      RouteKey: control.lease.release
+      AuthorizationType: NONE
+      Target: !Sub integrations/${LeaseReleaseIntegration}
+
+  PingRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      RouteKey: system.ping
+      AuthorizationType: NONE
+      Target: !Sub integrations/${PingIntegration}
+
+  WebsocketDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - ConnectRoute
+      - DisconnectRoute
+      - DefaultRoute
+      - ChatSendRoute
+      - PresenceUpdateRoute
+      - PresenceHeartbeatRoute
+      - LeaseSetRoute
+      - LeaseReleaseRoute
+      - PingRoute
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+
+  RealtimeDeploymentStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref RealtimeWebSocket
+      StageName: !Ref StageName
+      AutoDeploy: true
+      DeploymentId: !Ref WebsocketDeployment
+      DefaultRouteSettings:
+        DetailedMetricsEnabled: true
+      Tags:
+        Service: !Ref ServiceName
+
+  ConnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ConnectFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/$connect
+
+  DisconnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DisconnectFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/$disconnect
+
+  DefaultPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DefaultFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/$default
+
+  ChatSendPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ChatSendFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/chat.send
+
+  PresenceUpdatePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref PresenceUpdateFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/presence.update
+
+  PresenceHeartbeatPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref PresenceHeartbeatFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/presence.heartbeat
+
+  LeaseSetPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LeaseSetFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/control.lease.set
+
+  LeaseReleasePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LeaseReleaseFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/control.lease.release
+
+  PingPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref PingFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RealtimeWebSocket}/*/system.ping
+
+
+Outputs:
+  WebSocketApiId:
+    Description: API Gateway WebSocket API Id
+    Value: !Ref RealtimeWebSocket
+  WebSocketInvokeUrl:
+    Description: WebSocket endpoint URL
+    Value: !Sub wss://${RealtimeWebSocket}.execute-api.${AWS::Region}.amazonaws.com/${StageName}
+  ConnectionsTableNameOut:
+    Description: DynamoDB table storing active websocket connections.
+    Value: !Ref ConnectionsTable
+
