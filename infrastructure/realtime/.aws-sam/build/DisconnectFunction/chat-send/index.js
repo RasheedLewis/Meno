@@ -14,8 +14,17 @@ const { parseBody, buildEndpoint, nowIso } = require("../shared/utils");
 exports.handler = async (event) => {
   try {
     const payload = parseBody(event).payload;
-    if (!payload || typeof payload.content !== "string") {
-      return badRequest("Invalid chat payload");
+    const envelope = typeof payload === "object" && payload !== null ? payload : {};
+    const rawMessage = envelope.message && typeof envelope.message === "object" ? envelope.message : null;
+
+    const content =
+      typeof envelope.content === "string"
+        ? envelope.content
+        : typeof rawMessage?.content === "string"
+          ? rawMessage.content
+          : null;
+    if (!content) {
+      return badRequest("Invalid chat payload: missing content");
     }
 
     const connection = await getConnection(event.requestContext.connectionId);
@@ -23,22 +32,37 @@ exports.handler = async (event) => {
       return gone();
     }
 
-    const createdAt = payload.createdAt || nowIso();
-    const messageId = payload.messageId || uuidv4();
-    const meta = payload.meta ?? {};
+    const createdAt = envelope.createdAt || rawMessage?.createdAt || nowIso();
+    const messageId = envelope.messageId || rawMessage?.id || rawMessage?.messageId || uuidv4();
+    const role = rawMessage?.role || envelope.role || connection.role;
+    const meta = {
+      ...(typeof envelope.meta === "object" && envelope.meta !== null ? envelope.meta : rawMessage?.meta ?? {}),
+    };
 
-    const message = {
+    const persistedMessage = {
       sessionId: connection.sessionId,
       messageId,
       participantId: connection.participantId,
       participantName: connection.name,
-      role: connection.role,
-      content: payload.content,
+      role,
+      content,
       createdAt,
       meta,
     };
 
-    await persistChatMessage(message);
+    await persistChatMessage(persistedMessage);
+
+    const broadcastMessage = {
+      id: messageId,
+      role,
+      content,
+      createdAt,
+      meta: {
+        ...meta,
+        sessionId: connection.sessionId,
+        participantId: connection.participantId,
+      },
+    };
 
     await broadcastToSession({
       sessionId: connection.sessionId,
@@ -47,7 +71,7 @@ exports.handler = async (event) => {
         type: "chat.message",
         data: {
           sessionId: connection.sessionId,
-          message: message,
+          message: broadcastMessage,
         },
       },
     });

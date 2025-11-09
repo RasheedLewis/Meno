@@ -22,20 +22,33 @@ exports.handler = async (event) => {
       connection.participantId,
     );
 
+    const envelope = {
+      sessionId: connection.sessionId,
+      participantId: connection.participantId,
+      record: {
+        sessionId: connection.sessionId,
+        participantId: connection.participantId,
+        name: record?.name ?? connection.name,
+        role: record?.role ?? connection.role,
+        color: record?.color,
+        status: record?.status ?? "disconnected",
+        isTyping: false,
+        isSpeaking: false,
+        lastSeen: record?.lastSeen ?? nowIso(),
+        muted: record?.muted,
+        addressed: record?.addressed,
+        caption: record?.caption,
+        expiresAt: record?.expiresAt,
+        extra: record?.extra,
+      },
+    };
+
     await broadcastToSession({
       sessionId: connection.sessionId,
       endpoint: buildEndpoint(event),
       payload: {
         type: "presence.event",
-        data: {
-          sessionId: connection.sessionId,
-          participantId: connection.participantId,
-          status: record?.status ?? "disconnected",
-          isTyping: false,
-          isSpeaking: false,
-          lastSeen: record?.lastSeen ?? nowIso(),
-          extra: record?.extra,
-        },
+        data: envelope,
       },
     });
 

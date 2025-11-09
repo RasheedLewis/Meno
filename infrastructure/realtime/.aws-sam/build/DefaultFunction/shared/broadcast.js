@@ -23,6 +23,8 @@ async function postToConnection(client, connectionId, data) {
   return true;
 }
 
+const resolveRegion = () => process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+
 async function broadcastToSession({
   sessionId,
   endpoint,
@@ -34,7 +36,15 @@ async function broadcastToSession({
     return;
   }
 
-  const client = new ApiGatewayManagementApiClient({ endpoint });
+  const region = resolveRegion();
+  const client = new ApiGatewayManagementApiClient(
+    region
+      ? {
+          region,
+          endpoint,
+        }
+      : { endpoint },
+  );
 
   await Promise.all(
     connections
@@ -54,7 +64,15 @@ async function broadcastToSession({
 }
 
 async function sendToConnection({ endpoint, connectionId, payload }) {
-  const client = new ApiGatewayManagementApiClient({ endpoint });
+  const region = resolveRegion();
+  const client = new ApiGatewayManagementApiClient(
+    region
+      ? {
+          region,
+          endpoint,
+        }
+      : { endpoint },
+  );
   await postToConnection(client, connectionId, payload);
 }
 
