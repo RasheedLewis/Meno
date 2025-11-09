@@ -64,15 +64,20 @@ Resources:
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
       AttributeDefinitions:
-        - AttributeName: sessionId
-          AttributeType: S
         - AttributeName: connectionId
+          AttributeType: S
+        - AttributeName: sessionId
           AttributeType: S
       KeySchema:
-        - AttributeName: sessionId
-          KeyType: HASH
         - AttributeName: connectionId
-          KeyType: RANGE
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: sessionId-index
+          KeySchema:
+            - AttributeName: sessionId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
@@ -105,11 +110,14 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceName}-connect
-      CodeUri: ../../lambda/realtime/connect/
+      CodeUri: ../../lambda/realtime/
+      Handler: connect/index.handler
       Description: Handles $connect route (validate + persist connection metadata).
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PresenceTableName
         - Statement:
             - Effect: Allow
               Action:
@@ -126,7 +134,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceName}-disconnect
-      CodeUri: ../../lambda/realtime/disconnect/
+      CodeUri: ../../lambda/realtime/
+      Handler: disconnect/index.handler
       Description: Handles $disconnect (cleanup connection + presence).
       Policies:
         - DynamoDBCrudPolicy:
@@ -149,7 +158,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceName}-default
-      CodeUri: ../../lambda/realtime/default/
+      CodeUri: ../../lambda/realtime/
+      Handler: default/index.handler
       Description: Fallback handler for unknown actions.
       Policies:
         - Statement:
@@ -162,7 +172,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceName}-chat-send
-      CodeUri: ../../lambda/realtime/chat-send/
+      CodeUri: ../../lambda/realtime/
+      Handler: chat-send/index.handler
       Description: Handles chat.send action.
       Policies:
         - DynamoDBCrudPolicy:
@@ -179,7 +190,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceName}-presence-update
-      CodeUri: ../../lambda/realtime/presence-update/
+      CodeUri: ../../lambda/realtime/
+      Handler: presence-update/index.handler
       Description: Handles presence.update action.
       Policies:
         - DynamoDBCrudPolicy:
@@ -196,7 +208,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceName}-presence-heartbeat
-      CodeUri: ../../lambda/realtime/presence-heartbeat/
+      CodeUri: ../../lambda/realtime/
+      Handler: presence-heartbeat/index.handler
       Description: Handles presence.heartbeat action.
       Policies:
         - DynamoDBCrudPolicy:
@@ -213,7 +226,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceName}-lease-set
-      CodeUri: ../../lambda/realtime/lease-set/
+      CodeUri: ../../lambda/realtime/
+      Handler: lease-set/index.handler
       Description: Handles control.lease.set action.
       Policies:
         - DynamoDBCrudPolicy:
@@ -230,7 +244,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceName}-lease-release
-      CodeUri: ../../lambda/realtime/lease-release/
+      CodeUri: ../../lambda/realtime/
+      Handler: lease-release/index.handler
       Description: Handles control.lease.release action.
       Policies:
         - DynamoDBCrudPolicy:
@@ -247,7 +262,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub ${ServiceName}-ping
-      CodeUri: ../../lambda/realtime/ping/
+      CodeUri: ../../lambda/realtime/
+      Handler: ping/index.handler
       Description: Handles system.ping action.
       Policies:
         - Statement:
