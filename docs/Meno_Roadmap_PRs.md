@@ -227,6 +227,26 @@ Paths assume a Next.js + TypeScript web app using the `/app` directory and `page
 
 ---
 
+## PR-10e.1: Handwriting Solver Integration (Step Checks)
+
+**Goal:** Translate each submitted line into structured math, validate it, and display immediate feedback.
+
+**Subtasks**
+- [x] Capture the highlighted band to an off-screen canvas and include the cropped PNG with `lines/:stepIndex/submit`.
+- [ ] Add `/api/solver/line` endpoint that forwards snapshots to handwriting OCR (e.g., Mathpix) and normalizes expressions for the solver.
+- [ ] Persist solver outcomes with `SessionLineAttempt` (expression, correctness, usefulness, confidence).
+- [ ] Update web host UI to show success/failure states, trigger hints, and auto-advance highlight on success.
+- [ ] Mirror the feedback flow on the tablet client (toast/overlay, retry path).
+- [ ] Tests: OCR golden set, solver regression on decoded expressions, UI states for pass/fail.
+
+**Files**
+- (M) `meno-web/src/components/Whiteboard/*`, `lib/api/lease.ts`, `lib/store/session.ts`
+- (A) `meno-web/src/app/api/solver/line/route.ts`
+- (M) `docs/PR_10_Tablet.md`
+- (M) `meno-companion/` submit handlers (tablet parity)
+
+---
+
 ## PR-11: Voice Input (STT) — WebRTC Uplink
 
 **Goal:** Students speak; streaming STT returns partials with timestamps + diarization.

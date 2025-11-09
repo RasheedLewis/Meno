@@ -14,6 +14,21 @@ export interface ActiveLineLease {
   leaseExpiresAt: number;
 }
 
+export interface SessionLineSubmitter {
+  participantId?: string;
+  name?: string;
+  role?: ParticipantRole;
+}
+
+export interface SessionLineAttempt {
+  attemptId: string;
+  stepIndex: number;
+  strokes: unknown;
+  submitter?: SessionLineSubmitter;
+  createdAt: string;
+  snapshot?: string | null;
+}
+
 export interface Participant {
   id: string;
   name: string;
@@ -36,6 +51,7 @@ interface SessionState {
   isLoading: boolean;
   error: string | null;
   activeLine: ActiveLineLease | null;
+  recentAttempt: SessionLineAttempt | null;
   setSessionId: (sessionId: string | null) => void;
   setSessionCode: (sessionCode: string | null) => void;
   setParticipant: (payload: {
@@ -55,6 +71,7 @@ interface SessionState {
   setLoading: (loading: boolean) => void;
   setError: (message: string | null) => void;
   setActiveLine: (next: ActiveLineLease | null) => void;
+  setRecentAttempt: (attempt: SessionLineAttempt | null) => void;
   hydrateFromServer: (payload: {
     sessionId: string;
     code?: string | null;
@@ -62,6 +79,7 @@ interface SessionState {
     difficulty?: SessionDifficulty | null;
     participants?: Participant[];
     activeLine?: ActiveLineLease | null;
+    recentAttempt?: SessionLineAttempt | null;
   }) => void;
   resetSession: () => void;
 }
@@ -81,6 +99,7 @@ type SessionBaseState = {
   isLoading: boolean;
   error: string | null;
   activeLine: ActiveLineLease | null;
+  recentAttempt: SessionLineAttempt | null;
 };
 
 const baseSession: SessionBaseState = {
@@ -98,6 +117,7 @@ const baseSession: SessionBaseState = {
   isLoading: false,
   error: null,
   activeLine: null,
+  recentAttempt: null,
 };
 
 export const useSessionStore = create<SessionState>()(
@@ -142,6 +162,7 @@ export const useSessionStore = create<SessionState>()(
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
       setActiveLine: (activeLine) => set({ activeLine }),
+      setRecentAttempt: (recentAttempt) => set({ recentAttempt }),
       hydrateFromServer: ({ sessionId, code, sessionName, difficulty, participants, activeLine }) =>
         set((state) => ({
           sessionId,
@@ -150,6 +171,7 @@ export const useSessionStore = create<SessionState>()(
           difficulty: difficulty ?? state.difficulty,
           participants: participants ?? state.participants,
           activeLine: activeLine ?? state.activeLine,
+          recentAttempt: null,
           hspPlanId: null,
           hspPlan: null,
         })),

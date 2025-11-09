@@ -39,6 +39,7 @@ export interface SessionLineAttempt {
   strokes: unknown;
   submitter?: SessionLineSubmitter;
   createdAt: string;
+  snapshot?: string | null;
 }
 
 export interface SessionRecord {
@@ -142,6 +143,7 @@ const normalizeSessionRecord = (item: unknown): SessionRecord => {
         strokes: attempt.strokes,
         submitter: attempt.submitter,
         createdAt: attempt.createdAt,
+        snapshot: attempt.snapshot ?? null,
       })) :
       [];
 
@@ -319,6 +321,7 @@ interface AppendAttemptInput {
   stepIndex: number;
   strokes: unknown;
   submitter?: SessionLineSubmitter;
+  snapshot?: string | null;
 }
 
 export const appendSessionLineAttempt = async (
@@ -336,6 +339,7 @@ export const appendSessionLineAttempt = async (
     strokes: payload.strokes,
     submitter: payload.submitter,
     createdAt,
+    snapshot: payload.snapshot ?? null,
   };
 
   await client.send(

@@ -19,6 +19,7 @@ interface SubmitBody {
     name?: string;
     role?: string;
   };
+  snapshot?: string | null;
 }
 
 export async function POST(
@@ -69,6 +70,7 @@ export async function POST(
       stepIndex: parsedStepIndex,
       strokes: body.strokes,
       submitter: body.submitter,
+      snapshot: typeof body.snapshot === "string" ? body.snapshot : null,
     });
 
     // Auto advance lease to next line if requested

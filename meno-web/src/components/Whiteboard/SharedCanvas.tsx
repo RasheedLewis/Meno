@@ -23,6 +23,7 @@ interface PointerState {
 
 export interface SharedCanvasHandle {
   getCanvas: () => HTMLCanvasElement | null;
+  captureActiveBand: () => HTMLCanvasElement | null;
 }
 
 interface SharedCanvasProps {
@@ -70,6 +71,8 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
   const [size, setSize] = useState<{ width: number; height: number }>({ width: 1, height: 1 });
   const [isDrawing, setIsDrawing] = useState(false);
   const currentStrokeId = useRef<string | null>(null);
+  const activeBandRef = useRef<{ top: number; bottom: number; dpr: number; width: number } | null>(null);
+  const dprRef = useRef<number>(1);
 
   const [remotePointers, setRemotePointers] = useState<PointerState[]>([]);
 
@@ -77,6 +80,34 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
     ref,
     () => ({
       getCanvas: () => canvasRef.current,
+      captureActiveBand: () => {
+        const canvas = canvasRef.current;
+        const metrics = activeBandRef.current;
+        if (!canvas || !metrics) return null;
+        const { top, bottom, dpr, width } = metrics;
+        const cropTopPx = Math.max(Math.floor(top * dpr), 0);
+        const cropBottomPx = Math.min(Math.floor(bottom * dpr), canvas.height);
+        const cropHeightPx = Math.max(cropBottomPx - cropTopPx, 1);
+        const cropWidthPx = Math.max(Math.floor(width * dpr), 1);
+
+        const offscreen = document.createElement("canvas");
+        offscreen.width = cropWidthPx;
+        offscreen.height = cropHeightPx;
+        const ctx = offscreen.getContext("2d");
+        if (!ctx) return null;
+        ctx.drawImage(
+          canvas,
+          0,
+          cropTopPx,
+          cropWidthPx,
+          cropHeightPx,
+          0,
+          0,
+          cropWidthPx,
+          cropHeightPx,
+        );
+        return offscreen;
+      },
     }),
     [],
   );
@@ -142,6 +173,7 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio ?? 1;
+    dprRef.current = dpr;
     canvas.width = Math.floor(size.width * dpr);
     canvas.height = Math.floor(size.height * dpr);
     const context = canvas.getContext("2d");
@@ -159,15 +191,19 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
     context.fillStyle = CANVAS_BACKGROUND;
     context.fillRect(0, 0, size.width, size.height);
 
-    const totalLines = Math.max(6, Math.round(size.height / 120));
-    const lineGap = size.height / totalLines;
+    const topInset = Math.min(Math.max(size.height * 0.12, 96), size.height * 0.3);
+    const bottomInset = Math.min(Math.max(size.height * 0.08, 72), size.height * 0.25);
+    const availableHeight = Math.max(size.height - topInset - bottomInset, size.height * 0.4);
+
+    const totalLines = Math.max(6, Math.round(availableHeight / 120));
+    const lineGap = availableHeight / totalLines;
 
     context.strokeStyle = "rgba(54, 69, 79, 0.08)";
     context.lineWidth = 1;
     context.setLineDash([4, 8]);
 
     for (let index = 0; index <= totalLines; index += 1) {
-      const y = Math.round(index * lineGap) + 0.5;
+      const y = Math.round(topInset + index * lineGap) + 0.5;
       context.beginPath();
       context.moveTo(0, y);
       context.lineTo(size.width, y);
@@ -176,14 +212,32 @@ const SharedCanvas = forwardRef<SharedCanvasHandle, SharedCanvasProps>(function 
 
     if (typeof activeStepIndex === "number" && activeStepIndex >= 0) {
       const clampedIndex = Math.min(activeStepIndex, totalLines - 1);
-      const y = Math.round((clampedIndex + 1) * lineGap) + 0.5;
+      const bandTop = Math.round(topInset + clampedIndex * lineGap);
+      const bandBottom = Math.round(topInset + (clampedIndex + 1) * lineGap);
+
+      const paddedTop = Math.max(bandTop - 12, 0);
+      const paddedBottom = Math.min(bandBottom + 12, size.height);
+      activeBandRef.current = {
+        top: paddedTop,
+        bottom: paddedBottom,
+        dpr: dprRef.current,
+        width: size.width,
+      };
+
+      context.setLineDash([]);
+      context.fillStyle = window.matchMedia?.("(prefers-color-scheme: dark)").matches
+        ? "rgba(148, 163, 184, 0.14)"
+        : "rgba(14, 165, 233, 0.12)";
+      context.fillRect(0, paddedTop, size.width, paddedBottom - paddedTop);
+
       context.strokeStyle = pointerColor;
       context.lineWidth = 2;
-      context.setLineDash([]);
       context.beginPath();
-      context.moveTo(0, y);
-      context.lineTo(size.width, y);
+      context.moveTo(0, bandBottom + 0.5);
+      context.lineTo(size.width, bandBottom + 0.5);
       context.stroke();
+    } else {
+      activeBandRef.current = null;
     }
 
     const baseDimension = Math.min(size.width, size.height);

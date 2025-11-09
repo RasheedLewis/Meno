@@ -22,6 +22,12 @@ import { usePresenceStore } from "@/lib/store/presence";
 import { useSessionStore } from "@/lib/store/session";
 import { useYjs } from "@/lib/whiteboard/provider";
 import { chatClient } from "@/lib/chat/client";
+import {
+  fetchLease,
+  releaseLease as releaseLeaseApi,
+  submitLine,
+  takeLease as takeLeaseApi,
+} from "@/lib/api/lease";
 
 import SharedCanvas, { type SharedCanvasHandle } from "./SharedCanvas";
 
@@ -100,18 +106,74 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
     return () => window.clearInterval(timer);
   }, [activeLine?.leaseId, activeLine?.leaseExpiresAt, setActiveLineState]);
 
-  const handleTakeControl = useCallback(() => {
-    if (!localParticipantId || activeLine?.leaseTo === localParticipantId) return;
-    chatClient.setActiveLine({
-      stepIndex: activeLine?.stepIndex ?? 0,
-      leaseTo: localParticipantId,
-    });
-  }, [activeLine?.leaseTo, activeLine?.stepIndex, localParticipantId]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleReleaseControl = useCallback(() => {
-    if (activeLine?.leaseTo !== localParticipantId) return;
-    chatClient.clearActiveLine();
-  }, [activeLine?.leaseTo, localParticipantId]);
+  const handleTakeControl = useCallback(async () => {
+    if (!sessionId || !localParticipantId) return;
+    const targetStep = typeof activeLine?.stepIndex === "number" ? activeLine.stepIndex : 0;
+    try {
+      const response = await takeLeaseApi(sessionId, {
+        stepIndex: targetStep,
+        leaseTo: localParticipantId,
+      });
+      if (response.ok) {
+        setActiveLineState(response.data);
+      } else {
+        showToast({
+          variant: "error",
+          title: "Unable to take control",
+          description: response.error,
+        });
+      }
+    } catch (error) {
+      console.error("Take control failed", error);
+      showToast({
+        variant: "error",
+        title: "Unable to take control",
+        description: error instanceof Error ? error.message : "Unexpected error",
+      });
+    }
+  }, [activeLine?.stepIndex, localParticipantId, sessionId, setActiveLineState]);
+
+  const handleReleaseControl = useCallback(async () => {
+    if (!sessionId || activeLine?.leaseTo !== localParticipantId) return;
+    try {
+      const response = await releaseLeaseApi(sessionId);
+      if (response.ok) {
+        setActiveLineState(response.data);
+      } else {
+        showToast({
+          variant: "error",
+          title: "Unable to release control",
+          description: response.error,
+        });
+      }
+    } catch (error) {
+      console.error("Release control failed", error);
+      showToast({
+        variant: "error",
+        title: "Unable to release control",
+        description: error instanceof Error ? error.message : "Unexpected error",
+      });
+    }
+  }, [activeLine?.leaseTo, localParticipantId, sessionId, setActiveLineState]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const payload = await fetchLease(sessionId);
+        if (!payload?.ok || cancelled) return;
+        setActiveLineState(payload.data);
+      } catch (error) {
+        console.warn("Failed to hydrate lease state", error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, setActiveLineState]);
 
   const yjsConnection = useYjs(sessionId);
   const {
@@ -142,6 +204,68 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
       }),
     [beginStrokeInternal, localColor, localParticipantId],
   );
+
+  const handleSubmitStep = useCallback(async () => {
+    if (!sessionId || !localParticipantId || !strokes.length) return;
+    const stepIndex = activeLine?.stepIndex ?? 0;
+    setIsSubmitting(true);
+    try {
+      let snapshot: string | null = null;
+      const bandCanvas = canvasRef.current?.captureActiveBand();
+      if (bandCanvas) {
+        snapshot = bandCanvas.toDataURL("image/png");
+      }
+
+      const response = await submitLine(sessionId, stepIndex, {
+        strokes,
+        leaseTo: localParticipantId,
+        submitter: {
+          participantId: localParticipantId,
+          name: localDisplayName,
+          role: "teacher",
+        },
+        snapshot,
+      });
+      if (!response.ok) {
+        showToast({
+          variant: "error",
+          title: "Submission failed",
+          description: response.error,
+        });
+        return;
+      }
+      const { nextActiveLine } = response.data;
+      setActiveLineState({
+        leaseId: crypto.randomUUID?.() ?? `lease-${Date.now()}`,
+        stepIndex: nextActiveLine.stepIndex,
+        leaseTo: nextActiveLine.leaseTo,
+        leaseIssuedAt: new Date().toISOString(),
+        leaseExpiresAt: Date.now() + 30_000,
+      });
+      showToast({
+        variant: "success",
+        title: "Step accepted",
+        description: "Nice work. Move on to the next line.",
+      });
+    } catch (error) {
+      console.error("Submit line failed", error);
+      showToast({
+        variant: "error",
+        title: "Submission failed",
+        description: error instanceof Error ? error.message : "Unexpected error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [
+    activeLine?.stepIndex,
+    clearInternal,
+    localDisplayName,
+    localParticipantId,
+    setActiveLineState,
+    sessionId,
+    strokes,
+  ]);
 
   const appendToStroke = useCallback(
     (strokeId: string, points: CanvasPoint[]) => appendToStrokeInternal(strokeId, points),
@@ -358,12 +482,12 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
         localParticipantId={localParticipantId}
         localDisplayName={localDisplayName}
         onPointerUpdate={updatePointer}
-        activeStepIndex={activeLine?.stepIndex ?? null}
+        activeStepIndex={activeLine?.stepIndex ?? 0}
         canDraw={canDraw}
         disabledReason={drawDisabledReason}
       />
       {sessionId && localParticipantId ? (
-        <div className="pointer-events-none absolute top-4 right-4 flex flex-col items-end gap-2">
+        <div className="pointer-events-none absolute top-[calc(env(safe-area-inset-top)+1.75rem)] right-[max(1.5rem,env(safe-area-inset-right)+1rem)] flex flex-col items-end gap-3">
           <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--card)]/95 px-4 py-2 text-xs text-[var(--muted)] shadow-soft">
             <span className="flex items-center gap-2">
               <span
@@ -405,6 +529,15 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
               </Button>
             )}
           </div>
+          <Button
+            variant="success"
+            size="lg"
+            className="pointer-events-auto rounded-full px-6"
+            onClick={handleSubmitStep}
+            disabled={!canDraw || !strokes.length || isSubmitting}
+          >
+            {isSubmitting ? "Submitting…" : "Submit Line"}
+          </Button>
         </div>
       ) : null}
     </div>
