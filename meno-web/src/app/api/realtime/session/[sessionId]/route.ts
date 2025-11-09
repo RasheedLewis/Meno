@@ -114,6 +114,7 @@ export async function GET(
         isTyping: Boolean(item.isTyping),
         isSpeaking: Boolean(item.isSpeaking),
         lastSeen: (item.lastSeen as string | undefined) ?? null,
+        color: (item.color as string | undefined) ?? "#B47538",
         extra: (item.extra as Record<string, unknown> | undefined) ?? undefined,
       })) ?? [];
 

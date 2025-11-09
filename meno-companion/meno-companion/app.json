@@ -42,7 +42,8 @@
     ],
     "extra": {
       "apiBaseUrl": "http://10.10.0.8:3000",
-      "ywsBaseUrl": "ws://10.10.0.8:1234/yjs"
+      "ywsBaseUrl": "ws://10.10.0.8:1234/yjs",
+      "realtimeWsUrl": "wss://6s6vph1fq9.execute-api.us-east-2.amazonaws.com/prod"
     },
     "experiments": {
       "typedRoutes": true,

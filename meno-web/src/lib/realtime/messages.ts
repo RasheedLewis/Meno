@@ -2,19 +2,21 @@ import type { PresenceClientEvent } from "@/lib/presence/types";
 import type { ChatMessage } from "@/lib/types/chat";
 import type { ActiveLineLease } from "@/lib/store/session";
 
-export const REALTIME_PROTOCOL_VERSION = 1;
+export type RealtimeClientAction =
+  | "chat.send"
+  | "presence.update"
+  | "presence.heartbeat"
+  | "control.lease.set"
+  | "control.lease.release"
+  | "system.ping";
 
-export const REALTIME_MESSAGE_TYPE = {
-  CHAT_SYNC: 12,
-  CHAT_APPEND: 13,
-  PRESENCE_SNAPSHOT: 14,
-  PRESENCE_EVENT: 15,
-  CONTROL_LEASE_STATE: 16,
-  CONTROL_LEASE_REQUEST: 17,
-} as const;
-
-export type RealtimeMessageType =
-  (typeof REALTIME_MESSAGE_TYPE)[keyof typeof REALTIME_MESSAGE_TYPE];
+export type RealtimeServerEvent =
+  | "chat.sync"
+  | "chat.message"
+  | "presence.snapshot"
+  | "presence.event"
+  | "control.lease.state"
+  | "system.pong";
 
 export interface RealtimeChatSyncPayload {
   sessionId: string;
@@ -26,20 +28,13 @@ export interface RealtimeChatAppendPayload {
   message: ChatMessage;
 }
 
-export interface RealtimePresenceSnapshotPayload {
-  sessionId: string;
-  participants: RealtimePresenceParticipant[];
-  typingSummary: "none" | "single" | "multiple";
-  typingIds: string[];
-}
-
 export interface RealtimePresenceParticipant {
   sessionId: string;
   participantId: string;
   name: string;
   role: "student" | "teacher" | "observer";
-  color: string;
-  status: "online" | "typing" | "speaking" | "disconnected" | "muted" | "reconnecting";
+  color?: string;
+  status: "online" | "typing" | "speaking" | "disconnected" | "muted" | "reconnecting" | "offline";
   isTyping: boolean;
   isSpeaking: boolean;
   lastSeen: string;
@@ -47,6 +42,14 @@ export interface RealtimePresenceParticipant {
   addressed?: boolean;
   caption?: string;
   expiresAt?: number;
+  extra?: Record<string, unknown>;
+}
+
+export interface RealtimePresenceSnapshotPayload {
+  sessionId: string;
+  participants: RealtimePresenceParticipant[];
+  typingSummary: "none" | "single" | "multiple";
+  typingIds: string[];
 }
 
 export interface RealtimePresenceEventPayload {
@@ -73,19 +76,22 @@ export type RealtimeServerMessagePayload =
   | RealtimeChatAppendPayload
   | RealtimePresenceSnapshotPayload
   | RealtimePresenceEventPayload
-  | RealtimeControlLeaseStatePayload;
+  | RealtimeControlLeaseStatePayload
+  | { timestamp: number };
 
 export type RealtimeClientMessagePayload =
+  | RealtimeChatAppendPayload
   | RealtimePresenceEventPayload
   | RealtimeControlLeaseRequestPayload
-  | RealtimeChatAppendPayload;
+  | Record<string, never>;
 
-export interface RealtimeMessageEnvelope<TPayload> {
-  type: RealtimeMessageType;
-  payload: TPayload;
+export interface RealtimeServerEnvelope<TPayload extends RealtimeServerMessagePayload> {
+  type: RealtimeServerEvent;
+  data: TPayload;
 }
 
-export type RealtimeServerMessage = RealtimeMessageEnvelope<RealtimeServerMessagePayload>;
-
-export type RealtimeClientMessage = RealtimeMessageEnvelope<RealtimeClientMessagePayload>;
+export interface RealtimeClientEnvelope<TPayload extends RealtimeClientMessagePayload> {
+  action: RealtimeClientAction;
+  payload: TPayload;
+}
 

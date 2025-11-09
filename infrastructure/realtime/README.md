@@ -88,7 +88,10 @@ aws cloudformation deploy \
    `wss://<api-id>.execute-api.<region>.amazonaws.com/<StageName>` (output `WebSocketInvokeUrl`).
 2. **Verify DynamoDB connections table** (`ConnectionsTableName`) exists with TTL enabled.
 3. **Allow Lambdas to write to existing tables** — policies are attached automatically via the template; double-check if custom table names are used.
-4. **Set environment variables locally** (`NEXT_PUBLIC_CHAT_WS_URL`, `EXPO_PUBLIC_CHAT_WS_URL`) to the new WebSocket URL.
+4. **Set environment variables locally**:
+   - Web: `NEXT_PUBLIC_REALTIME_WEBSOCKET_URL=wss://<api-id>.execute-api.<region>.amazonaws.com/<stage>`
+   - Server (optional override): `REALTIME_WEBSOCKET_URL=...`
+   - Companion app `app.json`: `extra.realtimeWsUrl`
 5. **(Optional)** Create a dedicated IAM user/role for CI/CD deployments of this stack.
 
 Once the infrastructure is live, we can implement the Lambda runtime logic and update the clients to talk to this endpoint.

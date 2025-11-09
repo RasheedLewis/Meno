@@ -67,7 +67,6 @@ export function ChatPane({ className }: { className?: string }) {
   const participantId = useSessionStore((state) => state.participantId);
   const participantName = useSessionStore((state) => state.participantName);
   const participantRole = useSessionStore((state) => state.role);
-  const realtimeChannel = useSessionStore((state) => state.realtimeChannel);
   const planId = hspPlan?.id ?? hspPlanId;
 
   const [input, setInput] = useState("");
@@ -114,7 +113,7 @@ export function ChatPane({ className }: { className?: string }) {
   const skippedFirstCleanupRef = useRef(false);
 
   useEffect(() => {
-    if (!sessionId || !participantId || !participantName || !realtimeChannel) {
+    if (!sessionId || !participantId || !participantName) {
       return;
     }
 
@@ -143,7 +142,7 @@ export function ChatPane({ className }: { className?: string }) {
         typingTimerRef.current = null;
       }
     };
-  }, [sessionId, participantId, participantName, participantRole, realtimeChannel]);
+  }, [sessionId, participantId, participantName, participantRole]);
 
   const resetDialogueState = () => {
     clearMessages();

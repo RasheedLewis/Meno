@@ -14,4 +14,9 @@ export const YWS_BASE_URL: string =
     ? trimTrailingSlash(extra.ywsBaseUrl)
     : `${trimTrailingSlash(API_BASE_URL.replace(/^http/i, 'ws'))}/api/yws`;
 
+export const REALTIME_WS_URL: string | null =
+  typeof extra.realtimeWsUrl === 'string' && extra.realtimeWsUrl.length > 0
+    ? extra.realtimeWsUrl
+    : null;
+
 

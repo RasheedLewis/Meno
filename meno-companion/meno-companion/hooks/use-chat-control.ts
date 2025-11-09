@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { API_BASE_URL } from '@/constants/config';
+import { API_BASE_URL, REALTIME_WS_URL } from '@/constants/config';
 
 export interface ActiveLineLease {
   leaseId: string;
@@ -17,31 +17,45 @@ interface UseChatControlOptions {
   role: 'companion' | 'student' | 'teacher' | 'observer';
 }
 
-type ServerEvent =
+type ServerEnvelope =
   | {
-      type: 'chat.sync';
-      sessionId: string;
-      messages: unknown[];
+      type: 'control.lease.state';
+      data: {
+        sessionId: string;
+        leaseId: string | null;
+        stepIndex: number | null;
+        leaseTo: string | null;
+        leaseIssuedAt: string | null;
+        leaseExpiresAt: number | null;
+      };
     }
   | {
-      type: 'chat.message';
-      sessionId: string;
-      message: unknown;
+      type: 'system.pong';
+      data: { timestamp: number };
     }
   | {
-      type: 'control.activeLine';
-      sessionId: string;
-      activeLine: ActiveLineLease | null;
+      type: string;
+      data: unknown;
     };
 
 const buildWebsocketUrl = (sessionId: string, participantId: string, name: string, role: string) => {
-  const base = API_BASE_URL.replace(/\/+$/, '');
-  const wsBase = base.replace(/^http/, 'ws');
-  const url = new URL('/api/chat', wsBase);
+  const base = REALTIME_WS_URL ?? '';
+  if (!base) {
+    const fallback = API_BASE_URL.replace(/\/+$/, '').replace(/^http/, 'ws');
+    const url = new URL('/api/chat', fallback);
+    url.searchParams.set('sessionId', sessionId);
+    url.searchParams.set('participantId', participantId);
+    url.searchParams.set('name', name);
+    url.searchParams.set('role', role);
+    url.searchParams.set('client', 'tablet');
+    return url.toString();
+  }
+  const url = new URL(base);
   url.searchParams.set('sessionId', sessionId);
   url.searchParams.set('participantId', participantId);
   url.searchParams.set('name', name);
   url.searchParams.set('role', role);
+  url.searchParams.set('client', 'tablet');
   return url.toString();
 };
 
@@ -76,11 +90,30 @@ export const useChatControl = ({
         const ws = new WebSocket(buildWebsocketUrl(sessionId, participantId, name, role));
         wsRef.current = ws;
 
+        ws.onopen = () => {
+          try {
+            ws.send(JSON.stringify({ action: 'system.ping', payload: {} }));
+          } catch (error) {
+            console.warn('[Companion Chat] Failed to send ping', error);
+          }
+        };
+
         ws.onmessage = (event) => {
           try {
-            const payload = JSON.parse(event.data) as ServerEvent;
-            if (payload.type === 'control.activeLine') {
-              setActiveLine(payload.activeLine ?? null);
+            const payload = JSON.parse(event.data) as ServerEnvelope;
+            if (payload.type === 'control.lease.state') {
+              const lease = payload.data;
+              if (!lease || lease.stepIndex === null) {
+                setActiveLine(null);
+              } else {
+                setActiveLine({
+                  leaseId: lease.leaseId ?? '',
+                  stepIndex: lease.stepIndex,
+                  leaseTo: lease.leaseTo,
+                  leaseIssuedAt: lease.leaseIssuedAt ?? new Date().toISOString(),
+                  leaseExpiresAt: lease.leaseExpiresAt ?? Date.now(),
+                });
+              }
             }
           } catch (error) {
             console.warn('[Companion Chat] Failed to parse event', error);

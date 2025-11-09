@@ -47,13 +47,7 @@ exports.handler = async (event) => {
         type: "chat.message",
         data: {
           sessionId: connection.sessionId,
-          messageId,
-          participantId: connection.participantId,
-          participantName: connection.name,
-          role: connection.role,
-          content: payload.content,
-          createdAt,
-          meta,
+          message: message,
         },
       },
     });

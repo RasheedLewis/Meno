@@ -19,6 +19,7 @@ const serverSchema = z.object({
     SYMPY_SERVICE_URL: z.string().url().optional(),
     WHITEBOARD_TABLE_NAME: z.string().optional(),
     YJS_WEBSOCKET_URL: z.string().url().optional(),
+    REALTIME_WEBSOCKET_URL: z.string().url().optional(),
 });
 
 const clientSchema = z.object({
@@ -35,6 +36,10 @@ const clientSchema = z.object({
         .string()
         .url("NEXT_PUBLIC_YJS_WEBSOCKET_URL must be a valid URL")
         .default("ws://localhost:1234/yjs"),
+    NEXT_PUBLIC_REALTIME_WEBSOCKET_URL: z
+        .string()
+        .url("NEXT_PUBLIC_REALTIME_WEBSOCKET_URL must be a valid URL")
+        .optional(),
 });
 
 const _serverEnv = serverSchema.safeParse(process.env);
@@ -52,6 +57,8 @@ const _clientEnv = clientSchema.safeParse({
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     NEXT_PUBLIC_YJS_WEBSOCKET_URL: process.env.NEXT_PUBLIC_YJS_WEBSOCKET_URL,
+    NEXT_PUBLIC_REALTIME_WEBSOCKET_URL:
+        process.env.NEXT_PUBLIC_REALTIME_WEBSOCKET_URL,
 });
 
 if (!_clientEnv.success) {

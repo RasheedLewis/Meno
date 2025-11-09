@@ -1,12 +1,17 @@
 import type { ParticipantRole } from "@/lib/store/session";
 import { usePresenceStore } from "@/lib/store/presence";
-import { ensureRealtimeChannel, getRealtimeChannel } from "@/lib/realtime/channel";
+import {
+  ensureRealtimeChannel,
+  getRealtimeChannel,
+  removeRealtimeChannel,
+} from "@/lib/realtime/channel";
 import type {
   RealtimePresenceEventPayload,
   RealtimePresenceParticipant,
   RealtimePresenceSnapshotPayload,
 } from "@/lib/realtime/messages";
 import type { PresenceRecord } from "@/lib/presence/types";
+import { env } from "@/env";
 
 interface ConnectConfig {
   sessionId: string;
@@ -27,7 +32,7 @@ const toPresenceRecord = (participant: RealtimePresenceParticipant): PresenceRec
   participantId: participant.participantId,
   name: participant.name,
   role: participant.role,
-  color: participant.color,
+  color: participant.color ?? "#B47538",
   status: participant.status,
   isTyping: participant.isTyping,
   isSpeaking: participant.isSpeaking,
@@ -70,25 +75,25 @@ const attachChannel = (config: ConnectConfig) => {
     channel.onPresenceSnapshot(handleSnapshot),
     channel.onPresenceEvent(handlePresenceEvent),
   ];
-  channel.sendPresenceEvent({
+  channel.connect({
     sessionId: config.sessionId,
     participantId: config.participantId,
-    event: {
-      type: "join",
-      sessionId: config.sessionId,
-      participantId: config.participantId,
-      name: config.name,
-      role: config.role,
-    },
+    name: config.name,
+    role: config.role,
+    client: "web",
+    url: env.NEXT_PUBLIC_REALTIME_WEBSOCKET_URL ?? env.REALTIME_WEBSOCKET_URL,
+  });
+  channel.sendPresenceHeartbeat({
+    sessionId: config.sessionId,
+    participantId: config.participantId,
   });
   if (heartbeatId) {
     clearInterval(heartbeatId);
   }
   heartbeatId = setInterval(() => {
-    channel.sendPresenceEvent({
+    channel.sendPresenceHeartbeat({
       sessionId: config.sessionId,
       participantId: config.participantId,
-      event: { type: "heartbeat" },
     });
   }, HEARTBEAT_MS);
 };
@@ -108,6 +113,9 @@ export const presenceClient = {
       clearInterval(heartbeatId);
       heartbeatId = null;
     }
+    if (lastConfig) {
+      removeRealtimeChannel(lastConfig.sessionId);
+    }
     usePresenceStore.getState().reset();
     usePresenceStore.getState().setConnectionState("closed");
     lastConfig = null;
@@ -124,6 +132,10 @@ export const presenceClient = {
       participantId: lastConfig.participantId,
       event: { type: "typing", isTyping },
     });
+    channel.sendPresenceHeartbeat({
+      sessionId: lastConfig.sessionId,
+      participantId: lastConfig.participantId,
+    });
   },
 
   setSpeaking: (isSpeaking: boolean) => {
@@ -133,6 +145,10 @@ export const presenceClient = {
       sessionId: lastConfig.sessionId,
       participantId: lastConfig.participantId,
       event: { type: "speaking", isSpeaking },
+    });
+    channel.sendPresenceHeartbeat({
+      sessionId: lastConfig.sessionId,
+      participantId: lastConfig.participantId,
     });
   },
 };

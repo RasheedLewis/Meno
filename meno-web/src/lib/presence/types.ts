@@ -20,6 +20,7 @@ export interface PresenceRecord {
   muted?: boolean;
   addressed?: boolean;
   caption?: string;
+  extra?: Record<string, unknown>;
 }
 
 export interface PresenceSnapshot extends PresenceRecord {

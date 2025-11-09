@@ -12,6 +12,7 @@ import type {
   RealtimeChatSyncPayload,
   RealtimeControlLeaseStatePayload,
 } from "@/lib/realtime/messages";
+import { env } from "@/env";
 
 interface ConnectConfig {
   sessionId: string;
@@ -65,9 +66,17 @@ const handleLeaseState = (payload: RealtimeControlLeaseStatePayload) => {
   useSessionStore.getState().setActiveLine(payload.activeLine ?? null);
 };
 
-const attachChannel = (sessionId: string) => {
-  const nextChannel = getRealtimeChannel(sessionId) ?? ensureRealtimeChannel(sessionId);
+const attachChannel = (config: ConnectConfig) => {
+  const nextChannel = getRealtimeChannel(config.sessionId) ?? ensureRealtimeChannel(config.sessionId);
   if (channel === nextChannel) {
+    channel.connect({
+      sessionId: config.sessionId,
+      participantId: config.participantId,
+      name: config.name,
+      role: config.role,
+      client: "web",
+      url: env.NEXT_PUBLIC_REALTIME_WEBSOCKET_URL ?? env.REALTIME_WEBSOCKET_URL,
+    });
     return;
   }
   detachChannel();
@@ -77,12 +86,20 @@ const attachChannel = (sessionId: string) => {
     channel.onChatAppend(handleChatAppend),
     channel.onLeaseState(handleLeaseState),
   ];
+  channel.connect({
+    sessionId: config.sessionId,
+    participantId: config.participantId,
+    name: config.name,
+    role: config.role,
+    client: "web",
+    url: env.NEXT_PUBLIC_REALTIME_WEBSOCKET_URL ?? env.REALTIME_WEBSOCKET_URL,
+  });
 };
 
 export const chatClient = {
   connect: (config: ConnectConfig) => {
     lastConfig = config;
-    attachChannel(config.sessionId);
+    attachChannel(config);
   },
 
   disconnect: () => {

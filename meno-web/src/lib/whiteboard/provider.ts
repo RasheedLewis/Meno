@@ -1,11 +1,5 @@
 import { useEffect, useState } from "react";
 
-import {
-  ensureRealtimeChannel,
-  detachRealtimeChannelProvider,
-} from "@/lib/realtime/channel";
-import { useSessionStore } from "@/lib/store/session";
-import type { RealtimeChannel } from "@/lib/realtime/channel";
 import { getYjsWebsocketBaseUrl } from "@/lib/whiteboard/config";
 import { ensureSessionDoc, getStrokesArray } from "@/lib/whiteboard/sessionDoc";
 
@@ -21,7 +15,6 @@ export interface YjsConnection {
   doc: Doc;
   provider: WebsocketProvider;
   awareness: Awareness;
-  realtime: RealtimeChannel | null;
 }
 
 export function useYjs(roomId: string | null): YjsConnection | null {
@@ -31,7 +24,6 @@ export function useYjs(roomId: string | null): YjsConnection | null {
     let cancelled = false;
     let doc: Doc | null = null;
     let provider: WebsocketProvider | null = null;
-    let realtime: RealtimeChannel | null = null;
     let persistence: IndexeddbPersistence | null = null;
 
     if (!roomId) {
@@ -71,14 +63,11 @@ export function useYjs(roomId: string | null): YjsConnection | null {
         provider = new WebsocketProvider(serverUrl, roomId, doc, {
           connect: true,
         });
-        realtime = ensureRealtimeChannel(roomId, provider);
-        useSessionStore.getState().setRealtimeChannel(realtime);
 
         const connectionValue: YjsConnection = {
           doc,
           provider,
           awareness: provider.awareness,
-          realtime,
         };
 
         if (persistence?.whenSynced) {
@@ -112,10 +101,6 @@ export function useYjs(roomId: string | null): YjsConnection | null {
       if (provider) {
         provider.destroy();
       }
-      if (roomId) {
-        detachRealtimeChannelProvider(roomId);
-      }
-      useSessionStore.getState().setRealtimeChannel(null);
     };
   }, [roomId]);
 

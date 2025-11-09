@@ -1,168 +1,216 @@
-import * as decoding from "lib0/decoding";
-import * as encoding from "lib0/encoding";
-
-import type { WebsocketProvider } from "y-websocket";
-
-import {
-  REALTIME_MESSAGE_TYPE,
-  type RealtimeChatAppendPayload,
-  type RealtimeChatSyncPayload,
-  type RealtimeClientMessagePayload,
-  type RealtimeControlLeaseRequestPayload,
-  type RealtimeControlLeaseStatePayload,
-  type RealtimeMessageType,
-  type RealtimePresenceEventPayload,
-  type RealtimePresenceSnapshotPayload,
-  type RealtimeServerMessagePayload,
+import { env } from "@/env";
+import type {
+  RealtimeChatAppendPayload,
+  RealtimeChatSyncPayload,
+  RealtimeClientAction,
+  RealtimeControlLeaseRequestPayload,
+  RealtimeControlLeaseStatePayload,
+  RealtimePresenceEventPayload,
+  RealtimePresenceSnapshotPayload,
+  RealtimeServerEnvelope,
+  RealtimeServerEvent,
 } from "@/lib/realtime/messages";
 
 type MessageListener<TPayload> = (payload: TPayload) => void;
 
-const CUSTOM_MESSAGE_MIN = REALTIME_MESSAGE_TYPE.CHAT_SYNC;
+interface RealtimeConnectionConfig {
+  sessionId: string;
+  participantId: string;
+  name: string;
+  role: string;
+  client?: string;
+  url?: string;
+}
 
-const toUint8Array = (data: unknown): Uint8Array | null => {
-  if (data instanceof ArrayBuffer) {
-    return new Uint8Array(data);
-  }
-  if (ArrayBuffer.isView(data)) {
-    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-  }
-  if (typeof Blob !== "undefined" && data instanceof Blob) {
-    // Blob -> ArrayBuffer conversion is async; enqueue conversion.
-    return null;
-  }
-  if (typeof data === "string") {
-    return null;
-  }
-  return null;
-};
+interface PendingAction {
+  action: RealtimeClientAction;
+  payload: unknown;
+}
 
-const encodeMessage = (type: RealtimeMessageType, payload: RealtimeClientMessagePayload): Uint8Array => {
-  const encoder = encoding.createEncoder();
-  encoding.writeVarUint(encoder, type);
-  encoding.writeVarString(encoder, JSON.stringify(payload));
-  return encoding.toUint8Array(encoder);
-};
+const DEFAULT_CLIENT = "web";
+const RECONNECT_DELAY_MS = 1_500;
 
-const decodeMessage = (
-  buffer: Uint8Array,
-): { type: RealtimeMessageType; payload: RealtimeServerMessagePayload | null } | null => {
-  try {
-    const decoder = decoding.createDecoder(buffer);
-    const type = decoding.readVarUint(decoder) as RealtimeMessageType;
-    if (type < CUSTOM_MESSAGE_MIN) {
-      return null;
-    }
-    const payloadJson = decoding.hasContent(decoder) ? decoding.readVarString(decoder) : "";
-    const payload = payloadJson ? (JSON.parse(payloadJson) as RealtimeServerMessagePayload) : null;
-    return { type, payload };
-  } catch (error) {
-    console.error("[Realtime] Failed to decode message", error);
-    return null;
+const isBrowser = () => typeof window !== "undefined";
+
+const resolveBaseUrl = () => {
+  if (typeof window !== "undefined") {
+    return env.NEXT_PUBLIC_REALTIME_WEBSOCKET_URL ?? env.REALTIME_WEBSOCKET_URL;
   }
+  return env.REALTIME_WEBSOCKET_URL ?? process.env.NEXT_PUBLIC_REALTIME_WEBSOCKET_URL;
 };
 
 class RealtimeChannel {
   readonly roomId: string;
-  private provider: WebsocketProvider | null = null;
   private socket: WebSocket | null = null;
-  private queue: Uint8Array[] = [];
-  private listeners = new Map<RealtimeMessageType, Set<MessageListener<RealtimeServerMessagePayload>>>();
-  private statusHandlersBound = false;
+  private queue: PendingAction[] = [];
+  private listeners = new Map<RealtimeServerEvent, Set<MessageListener<any>>>();
+  private config: RealtimeConnectionConfig | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(roomId: string) {
     this.roomId = roomId;
   }
 
-  attachProvider(provider: WebsocketProvider) {
-    if (this.provider === provider) {
-      this.bindSocket();
+  connect(config: RealtimeConnectionConfig) {
+    const normalized: RealtimeConnectionConfig = {
+      ...config,
+      client: config.client ?? DEFAULT_CLIENT,
+    };
+    const isSameConfig =
+      this.config &&
+      this.config.sessionId === normalized.sessionId &&
+      this.config.participantId === normalized.participantId &&
+      this.config.name === normalized.name &&
+      this.config.role === normalized.role &&
+      this.config.client === normalized.client &&
+      this.config.url === normalized.url;
+
+    this.config = normalized;
+
+    if (isSameConfig && this.socket && this.socket.readyState !== WebSocket.CLOSED) {
       return;
     }
-    this.detachProvider();
-    this.provider = provider;
-    if (!this.statusHandlersBound) {
-      provider.on("status", this.handleStatus);
-      this.statusHandlersBound = true;
-    }
-    this.bindSocket();
+
+    this.openSocket(true);
   }
 
-  detachProvider() {
-    if (!this.provider) {
-      return;
+  disconnect() {
+    this.config = null;
+    this.queue = [];
+    this.clearReconnectTimer();
+    if (this.socket) {
+      this.socket.removeEventListener("open", this.handleOpen);
+      this.socket.removeEventListener("close", this.handleClose);
+      this.socket.removeEventListener("error", this.handleError);
+      this.socket.removeEventListener("message", this.handleMessage);
+      try {
+        this.socket.close();
+      } catch {
+        /* noop */
+      }
     }
-    if (this.statusHandlersBound) {
-      this.provider.off("status", this.handleStatus);
-      this.statusHandlersBound = false;
-    }
-    this.provider = null;
-    this.unbindSocket();
+    this.socket = null;
   }
 
   dispose() {
-    this.detachProvider();
+    this.disconnect();
     this.listeners.clear();
-    this.queue = [];
   }
 
-  on<TPayload extends RealtimeServerMessagePayload>(
-    type: RealtimeMessageType,
-    handler: MessageListener<TPayload>,
-  ): () => void {
+  on<TPayload>(type: RealtimeServerEvent, handler: MessageListener<TPayload>): () => void {
     const set = this.listeners.get(type) ?? new Set();
-    set.add(handler as MessageListener<RealtimeServerMessagePayload>);
+    set.add(handler as MessageListener<any>);
     this.listeners.set(type, set);
     return () => {
       const current = this.listeners.get(type);
       if (!current) return;
-      current.delete(handler as MessageListener<RealtimeServerMessagePayload>);
+      current.delete(handler as MessageListener<any>);
       if (current.size === 0) {
         this.listeners.delete(type);
       }
     };
   }
 
-  send(type: RealtimeMessageType, payload: RealtimeClientMessagePayload) {
-    const frame = encodeMessage(type, payload);
-    const socket = this.socket;
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(frame);
+  send(action: RealtimeClientAction, payload: unknown) {
+    if (!this.config) {
+      console.warn("[Realtime] send called before connect");
       return;
     }
-    this.queue.push(frame);
+    const envelope = JSON.stringify({ action, payload });
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(envelope);
+    } else {
+      this.queue.push({ action, payload });
+      this.openSocket(false);
+    }
   }
 
   sendChatAppend(payload: RealtimeChatAppendPayload) {
-    this.send(REALTIME_MESSAGE_TYPE.CHAT_APPEND, payload);
+    this.send("chat.send", payload);
   }
 
   sendPresenceEvent(payload: RealtimePresenceEventPayload) {
-    this.send(REALTIME_MESSAGE_TYPE.PRESENCE_EVENT, payload);
+    this.send("presence.update", payload);
+  }
+
+  sendPresenceHeartbeat(payload: { sessionId: string; participantId: string }) {
+    this.send("presence.heartbeat", payload);
   }
 
   sendLeaseRequest(payload: RealtimeControlLeaseRequestPayload) {
-    this.send(REALTIME_MESSAGE_TYPE.CONTROL_LEASE_REQUEST, payload);
+    if (payload.stepIndex === null) {
+      this.send("control.lease.release", { sessionId: payload.sessionId });
+    } else {
+      this.send("control.lease.set", payload);
+    }
+  }
+
+  sendPing() {
+    this.send("system.ping", {});
   }
 
   onChatSync(handler: MessageListener<RealtimeChatSyncPayload>) {
-    return this.on(REALTIME_MESSAGE_TYPE.CHAT_SYNC, handler);
+    return this.on("chat.sync", handler);
   }
 
   onChatAppend(handler: MessageListener<RealtimeChatAppendPayload>) {
-    return this.on(REALTIME_MESSAGE_TYPE.CHAT_APPEND, handler);
+    return this.on("chat.message", handler);
   }
 
   onPresenceSnapshot(handler: MessageListener<RealtimePresenceSnapshotPayload>) {
-    return this.on(REALTIME_MESSAGE_TYPE.PRESENCE_SNAPSHOT, handler);
+    return this.on("presence.snapshot", handler);
   }
 
   onPresenceEvent(handler: MessageListener<RealtimePresenceEventPayload>) {
-    return this.on(REALTIME_MESSAGE_TYPE.PRESENCE_EVENT, handler);
+    return this.on("presence.event", handler);
   }
 
   onLeaseState(handler: MessageListener<RealtimeControlLeaseStatePayload>) {
-    return this.on(REALTIME_MESSAGE_TYPE.CONTROL_LEASE_STATE, handler);
+    return this.on("control.lease.state", handler);
+  }
+
+  private openSocket(force: boolean) {
+    if (!isBrowser()) {
+      return;
+    }
+    if (!this.config) {
+      return;
+    }
+    if (this.socket && this.socket.readyState !== WebSocket.CLOSED) {
+      if (!force) {
+        return;
+      }
+      this.disconnect();
+    }
+
+    const baseUrl = this.config.url ?? resolveBaseUrl();
+    if (!baseUrl) {
+      console.error(
+        "[Realtime] REALTIME_WEBSOCKET_URL/NEXT_PUBLIC_REALTIME_WEBSOCKET_URL is not configured",
+      );
+      return;
+    }
+
+    try {
+      const url = new URL(baseUrl);
+      url.searchParams.set("sessionId", this.config.sessionId);
+      url.searchParams.set("participantId", this.config.participantId);
+      url.searchParams.set("name", this.config.name);
+      url.searchParams.set("role", this.config.role);
+      url.searchParams.set("client", this.config.client ?? DEFAULT_CLIENT);
+
+      const socket = new WebSocket(url.toString());
+      this.socket = socket;
+      this.clearReconnectTimer();
+
+      socket.addEventListener("open", this.handleOpen);
+      socket.addEventListener("close", this.handleClose);
+      socket.addEventListener("error", this.handleError);
+      socket.addEventListener("message", this.handleMessage);
+    } catch (error) {
+      console.error("[Realtime] Failed to open websocket", error);
+      this.scheduleReconnect();
+    }
   }
 
   private flushQueue() {
@@ -170,38 +218,15 @@ class RealtimeChannel {
       return;
     }
     while (this.queue.length > 0) {
-      const frame = this.queue.shift();
-      if (frame) {
-        this.socket.send(frame);
+      const next = this.queue.shift();
+      if (!next) continue;
+      try {
+        this.socket.send(JSON.stringify(next));
+      } catch (error) {
+        console.error("[Realtime] Failed to send frame", error);
+        break;
       }
     }
-  }
-
-  private bindSocket() {
-    const nextSocket = this.provider?.ws ?? null;
-    if (!nextSocket || nextSocket === this.socket) {
-      return;
-    }
-
-    this.unbindSocket();
-    this.socket = nextSocket;
-    this.socket.binaryType = "arraybuffer";
-    this.socket.addEventListener("open", this.handleOpen);
-    this.socket.addEventListener("close", this.handleClose);
-    this.socket.addEventListener("message", this.handleMessage);
-    if (this.socket.readyState === WebSocket.OPEN) {
-      this.flushQueue();
-    }
-  }
-
-  private unbindSocket() {
-    if (!this.socket) {
-      return;
-    }
-    this.socket.removeEventListener("open", this.handleOpen);
-    this.socket.removeEventListener("close", this.handleClose);
-    this.socket.removeEventListener("message", this.handleMessage);
-    this.socket = null;
   }
 
   private readonly handleOpen = () => {
@@ -209,73 +234,71 @@ class RealtimeChannel {
   };
 
   private readonly handleClose = () => {
-    // On reconnect a new socket instance will be attached.
-    this.bindSocket();
+    this.scheduleReconnect();
+  };
+
+  private readonly handleError = () => {
+    this.scheduleReconnect();
   };
 
   private readonly handleMessage = (event: MessageEvent<unknown>) => {
-    const bytes = toUint8Array(event.data);
-    if (!bytes) {
+    if (typeof event.data !== "string") {
       return;
     }
-    const decoded = decodeMessage(bytes);
-    if (!decoded || !decoded.payload) {
-      return;
-    }
-    const listeners = this.listeners.get(decoded.type);
-    if (!listeners || listeners.size === 0) {
-      return;
-    }
-    listeners.forEach((listener) => {
-      try {
-        listener(decoded.payload);
-      } catch (error) {
-        console.error("[Realtime] Listener error", error);
+    try {
+      const envelope = JSON.parse(event.data as string) as RealtimeServerEnvelope<any>;
+      if (!envelope || typeof envelope.type !== "string") {
+        return;
       }
-    });
+      const listeners = this.listeners.get(envelope.type as RealtimeServerEvent);
+      if (!listeners || listeners.size === 0) {
+        return;
+      }
+      listeners.forEach((listener) => {
+        try {
+          listener(envelope.data);
+        } catch (error) {
+          console.error("[Realtime] Listener error", error);
+        }
+      });
+    } catch (error) {
+      console.warn("[Realtime] Failed to parse message", error);
+    }
   };
 
-  private readonly handleStatus = (event: { status: "connected" | "disconnected" }) => {
-    if (event.status === "connected") {
-      this.bindSocket();
-      this.flushQueue();
+  private scheduleReconnect() {
+    if (!this.config) {
+      return;
     }
-  };
+    if (this.reconnectTimer) {
+      return;
+    }
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.openSocket(false);
+    }, RECONNECT_DELAY_MS);
+  }
+
+  private clearReconnectTimer() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
 }
 
 const channels = new Map<string, RealtimeChannel>();
-const waiters = new Map<string, Set<(channel: RealtimeChannel) => void>>();
 
-export const ensureRealtimeChannel = (roomId: string, provider?: WebsocketProvider) => {
+export const ensureRealtimeChannel = (roomId: string) => {
   let channel = channels.get(roomId);
   if (!channel) {
     channel = new RealtimeChannel(roomId);
     channels.set(roomId, channel);
-    const pending = waiters.get(roomId);
-    if (pending) {
-      pending.forEach((handler) => handler(channel!));
-      waiters.delete(roomId);
-    }
-  }
-  if (provider) {
-    channel.attachProvider(provider);
   }
   return channel;
 };
 
 export const getRealtimeChannel = (roomId: string) => channels.get(roomId) ?? null;
-
-export const waitForRealtimeChannel = (roomId: string): Promise<RealtimeChannel> => {
-  const existing = channels.get(roomId);
-  if (existing) {
-    return Promise.resolve(existing);
-  }
-  return new Promise<RealtimeChannel>((resolve) => {
-    const set = waiters.get(roomId) ?? new Set();
-    set.add(resolve);
-    waiters.set(roomId, set);
-  });
-};
 
 export const removeRealtimeChannel = (roomId: string) => {
   const channel = channels.get(roomId);
@@ -291,8 +314,8 @@ export const detachRealtimeChannelProvider = (roomId: string) => {
   if (!channel) {
     return;
   }
-  channel.detachProvider();
+  channel.disconnect();
 };
 
-export type { RealtimeChannel };
+export type { RealtimeChannel, RealtimeConnectionConfig };
 

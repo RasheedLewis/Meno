@@ -207,15 +207,15 @@ Paths assume a Next.js + TypeScript web app using the `/app` directory and `page
 **Goal:** Move chat, presence, and lease control onto an AWS API Gateway WebSocket backed by Lambda + DynamoDB, replacing the in-process Next.js sockets.
 
 **Subtasks**
-- [ ] Lock down websocket message schema (chat, presence, control) and connection metadata contract.
-- [ ] Provision infrastructure (API Gateway WebSocket, Lambda handlers, DynamoDB tables) via CDK/CloudFormation.
-- [ ] Implement Lambda `$connect` / `$disconnect` / route handlers (persist connection, chat messages, presence, leases).
-- [ ] Broadcast events using API Gateway Management API; handle stale connections.
-- [ ] Expose REST hydrators (chat history, presence snapshot, lease state) for new clients.
-- [ ] Update web + tablet clients to connect to the new WebSocket URL and send/receive the defined actions.
-- [ ] Refactor Zustand stores to use AWS stream payloads; remove legacy Next.js websocket code.
-- [ ] Update session lifecycle to clear state and request hydrations on join/create.
-- [ ] Document deployment steps, environment variables, and fallback strategy.
+- [x] Lock down websocket message schema (chat, presence, control) and connection metadata contract.
+- [x] Provision infrastructure (API Gateway WebSocket, Lambda handlers, DynamoDB tables) via CDK/CloudFormation.
+- [x] Implement Lambda `$connect` / `$disconnect` / route handlers (persist connection, chat messages, presence, leases).
+- [x] Broadcast events using API Gateway Management API; handle stale connections.
+- [x] Expose REST hydrators (chat history, presence snapshot, lease state) for new clients.
+- [ ] Wire web + tablet clients to hydrate from `/api/realtime/session/[sessionId]` and clear legacy state on join.
+- [ ] Switch web + tablet clients to broadcast/consume realtime actions (`chat.send`, `presence.update`, `control.lease.*`) end-to-end; drop deprecated `/api/chat` websocket usage.
+- [ ] Remove Next.js chat/presence websocket routes and legacy client code once the new path is stable.
+- [ ] Document environment variables / deployment steps for the new realtime channel (web + tablet).
 
 **Files**
 - (A) `infrastructure/realtime/*` — CDK/SAM templates + lambda source
