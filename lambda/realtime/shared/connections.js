@@ -31,12 +31,14 @@ async function putConnection({
     ttl: nowSeconds() + config.connectionTtlSeconds,
   };
 
+  console.log(`[connections] Storing connection: ${JSON.stringify({ connectionId, sessionId, participantId })}`);
   await documentClient.send(
     new PutCommand({
       TableName: config.tables.connections,
       Item: item,
     }),
   );
+  console.log(`[connections] Connection stored successfully`);
 
   return item;
 }
@@ -62,9 +64,11 @@ async function getConnection(connectionId) {
 
 async function listConnections(sessionId) {
   if (!sessionId) {
+    console.warn(`[connections] listConnections called with empty sessionId`);
     return [];
   }
 
+  console.log(`[connections] Querying connections for sessionId: ${sessionId}, table: ${config.tables.connections}, index: ${sessionIndexName}`);
   const result = await documentClient.send(
     new QueryCommand({
       TableName: config.tables.connections,
@@ -76,6 +80,7 @@ async function listConnections(sessionId) {
     }),
   );
 
+  console.log(`[connections] Query returned ${result.Items?.length || 0} items`);
   return result.Items || [];
 }
 

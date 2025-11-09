@@ -10,11 +10,14 @@ const { buildEndpoint, nowIso } = require("../shared/utils");
 exports.handler = async (event) => {
   try {
     const connectionId = event.requestContext.connectionId;
+    console.log(`[disconnect] Connection closing: ${connectionId}`);
     const connection = await getConnection(connectionId);
     if (!connection) {
+      console.log(`[disconnect] No connection record found for ${connectionId}`);
       return success(); // nothing to do
     }
 
+    console.log(`[disconnect] Deleting connection for sessionId=${connection.sessionId}, participantId=${connection.participantId}`);
     await deleteConnection(connectionId);
 
     const record = await presence.markDisconnected(

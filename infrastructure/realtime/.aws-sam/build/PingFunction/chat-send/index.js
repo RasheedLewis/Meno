@@ -64,16 +64,19 @@ exports.handler = async (event) => {
       },
     };
 
+    const broadcastPayload = {
+      type: "chat.message",
+      data: {
+        sessionId: connection.sessionId,
+        message: broadcastMessage,
+      },
+    };
+    console.log(`[chat.send] Broadcasting message ${messageId} to session ${connection.sessionId}`);
     await broadcastToSession({
       sessionId: connection.sessionId,
       endpoint: buildEndpoint(event),
-      payload: {
-        type: "chat.message",
-        data: {
-          sessionId: connection.sessionId,
-          message: broadcastMessage,
-        },
-      },
+      payload: broadcastPayload,
+      excludeConnectionId: event.requestContext.connectionId,
     });
 
     return success({ ok: true });

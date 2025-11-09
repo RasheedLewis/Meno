@@ -117,9 +117,11 @@ class RealtimeChannel {
       return;
     }
     const envelope = JSON.stringify({ action, payload });
+    console.log(`[Realtime] Sending action: ${action}`, payload);
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(envelope);
     } else {
+      console.warn(`[Realtime] Socket not ready (state: ${this.socket?.readyState}), queuing message`);
       this.queue.push({ action, payload });
       this.openSocket(false);
     }
@@ -230,6 +232,7 @@ class RealtimeChannel {
   }
 
   private readonly handleOpen = () => {
+    console.log(`[Realtime] WebSocket connected for room: ${this.roomId}`);
     this.flushQueue();
   };
 
@@ -243,17 +246,22 @@ class RealtimeChannel {
 
   private readonly handleMessage = (event: MessageEvent<unknown>) => {
     if (typeof event.data !== "string") {
+      console.warn("[Realtime] Received non-string message data");
       return;
     }
     try {
       const envelope = JSON.parse(event.data as string) as RealtimeServerEnvelope<any>;
+      console.log(`[Realtime] Received message type: ${envelope?.type}`, envelope);
       if (!envelope || typeof envelope.type !== "string") {
+        console.warn("[Realtime] Invalid envelope structure");
         return;
       }
       const listeners = this.listeners.get(envelope.type as RealtimeServerEvent);
       if (!listeners || listeners.size === 0) {
+        console.warn(`[Realtime] No listeners registered for type: ${envelope.type}`);
         return;
       }
+      console.log(`[Realtime] Dispatching to ${listeners.size} listener(s) for type: ${envelope.type}`);
       listeners.forEach((listener) => {
         try {
           listener(envelope.data);

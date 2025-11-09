@@ -23,6 +23,8 @@ async function postToConnection(client, connectionId, data) {
   return true;
 }
 
+const resolveRegion = () => process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+
 async function broadcastToSession({
   sessionId,
   endpoint,
@@ -30,16 +32,27 @@ async function broadcastToSession({
   excludeConnectionId,
 }) {
   const connections = await listConnections(sessionId);
+  console.log(`[broadcast] Found ${connections.length} connections for session ${sessionId}`);
   if (!connections.length) {
+    console.warn(`[broadcast] No connections found for session ${sessionId}`);
     return;
   }
 
-  const client = new ApiGatewayManagementApiClient({ endpoint });
+  const region = resolveRegion();
+  const client = new ApiGatewayManagementApiClient(
+    region
+      ? {
+          region,
+          endpoint,
+        }
+      : { endpoint },
+  );
+
+  const filtered = connections.filter((connection) => connection.connectionId !== excludeConnectionId);
+  console.log(`[broadcast] Broadcasting to ${filtered.length} connections (excluding ${excludeConnectionId || 'none'})`);
 
   await Promise.all(
-    connections
-      .filter((connection) => connection.connectionId !== excludeConnectionId)
-      .map((connection) =>
+    filtered.map((connection) =>
         postToConnection(client, connection.connectionId, payload).catch(
           (error) => {
             console.error(
@@ -54,7 +67,15 @@ async function broadcastToSession({
 }
 
 async function sendToConnection({ endpoint, connectionId, payload }) {
-  const client = new ApiGatewayManagementApiClient({ endpoint });
+  const region = resolveRegion();
+  const client = new ApiGatewayManagementApiClient(
+    region
+      ? {
+          region,
+          endpoint,
+        }
+      : { endpoint },
+  );
   await postToConnection(client, connectionId, payload);
 }
 

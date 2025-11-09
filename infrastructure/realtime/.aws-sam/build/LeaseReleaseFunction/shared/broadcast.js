@@ -32,7 +32,9 @@ async function broadcastToSession({
   excludeConnectionId,
 }) {
   const connections = await listConnections(sessionId);
+  console.log(`[broadcast] Found ${connections.length} connections for session ${sessionId}`);
   if (!connections.length) {
+    console.warn(`[broadcast] No connections found for session ${sessionId}`);
     return;
   }
 
@@ -46,10 +48,11 @@ async function broadcastToSession({
       : { endpoint },
   );
 
+  const filtered = connections.filter((connection) => connection.connectionId !== excludeConnectionId);
+  console.log(`[broadcast] Broadcasting to ${filtered.length} connections (excluding ${excludeConnectionId || 'none'})`);
+
   await Promise.all(
-    connections
-      .filter((connection) => connection.connectionId !== excludeConnectionId)
-      .map((connection) =>
+    filtered.map((connection) =>
         postToConnection(client, connection.connectionId, payload).catch(
           (error) => {
             console.error(

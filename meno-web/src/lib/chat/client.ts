@@ -57,7 +57,15 @@ const handleChatSync = (payload: RealtimeChatSyncPayload) => {
 };
 
 const handleChatAppend = (payload: RealtimeChatAppendPayload) => {
-  if (!lastConfig || payload.sessionId !== lastConfig.sessionId) return;
+  console.log("[chatClient] Received chat.message:", payload);
+  if (!lastConfig || payload.sessionId !== lastConfig.sessionId) {
+    console.warn(`[chatClient] Ignoring message - sessionId mismatch or no config`, {
+      lastConfig: lastConfig?.sessionId,
+      payloadSessionId: payload.sessionId,
+    });
+    return;
+  }
+  console.log("[chatClient] Adding message to store:", payload.message);
   useChatStore.getState().addMessage(payload.message);
 };
 
@@ -114,20 +122,22 @@ export const chatClient = {
       return;
     }
     const activeChannel = channel ?? ensureRealtimeChannel(lastConfig.sessionId);
-    const message: ChatMessage = {
-      id: options.id,
-      role: options.role,
-      content: options.content,
-      createdAt: options.createdAt ?? new Date().toISOString(),
-      meta: {
-        ...options.meta,
-        sessionId: lastConfig.sessionId,
-        participantId: lastConfig.participantId,
-      },
+    const createdAt = options.createdAt ?? new Date().toISOString();
+    const meta: ChatMessage["meta"] = {
+      ...options.meta,
+      sessionId: lastConfig.sessionId,
+      participantId: lastConfig.participantId,
     };
+
     activeChannel.sendChatAppend({
       sessionId: lastConfig.sessionId,
-      message,
+      message: {
+        id: options.id,
+        role: options.role,
+        content: options.content,
+        createdAt,
+        meta,
+      },
     });
   },
 

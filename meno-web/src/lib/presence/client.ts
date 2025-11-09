@@ -53,19 +53,30 @@ const handleSnapshot = (payload: RealtimePresenceSnapshotPayload) => {
 const handlePresenceEvent = (payload: RealtimePresenceEventPayload) => {
   if (!lastConfig || payload.sessionId !== lastConfig.sessionId) return;
   usePresenceStore.getState().setConnectionState("open");
-  if (payload.record) {
-    const snapshot = usePresenceStore.getState().participants.slice();
-    const index = snapshot.findIndex((item) => item.participantId === payload.record?.participantId);
-    const record = toPresenceRecord(payload.record);
-    if (index >= 0) {
-      snapshot[index] = record;
-    } else {
-      snapshot.push(record);
-    }
-    const typingIds = snapshot.filter((item) => item.isTyping).map((item) => item.participantId);
-    const typingSummary = typingIds.length === 0 ? "none" : typingIds.length === 1 ? "single" : "multiple";
-    usePresenceStore.getState().setParticipants(snapshot, typingSummary, typingIds);
+  const participantRecord = payload.record
+    ? toPresenceRecord(payload.record)
+    : ({
+        sessionId: payload.sessionId,
+        participantId: payload.participantId,
+        name: "Participant",
+        role: "student",
+        color: "#B47538",
+        status: "online",
+        isTyping: false,
+        isSpeaking: false,
+        lastSeen: new Date().toISOString(),
+      } satisfies PresenceRecord);
+
+  const snapshot = usePresenceStore.getState().participants.slice();
+  const index = snapshot.findIndex((item) => item.participantId === participantRecord.participantId);
+  if (index >= 0) {
+    snapshot[index] = participantRecord;
+  } else {
+    snapshot.push(participantRecord);
   }
+  const typingIds = snapshot.filter((item) => item.isTyping).map((item) => item.participantId);
+  const typingSummary = typingIds.length === 0 ? "none" : typingIds.length === 1 ? "single" : "multiple";
+  usePresenceStore.getState().setParticipants(snapshot, typingSummary, typingIds);
 };
 
 const attachChannel = (config: ConnectConfig) => {
@@ -82,6 +93,17 @@ const attachChannel = (config: ConnectConfig) => {
     role: config.role,
     client: "web",
     url: env.NEXT_PUBLIC_REALTIME_WEBSOCKET_URL ?? env.REALTIME_WEBSOCKET_URL,
+  });
+  channel.sendPresenceEvent({
+    sessionId: config.sessionId,
+    participantId: config.participantId,
+    event: {
+      type: "join",
+      sessionId: config.sessionId,
+      participantId: config.participantId,
+      name: config.name,
+      role: config.role,
+    },
   });
   channel.sendPresenceHeartbeat({
     sessionId: config.sessionId,

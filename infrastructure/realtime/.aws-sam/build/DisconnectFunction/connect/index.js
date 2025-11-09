@@ -23,6 +23,7 @@ exports.handler = async (event) => {
 
     const connectionId = event.requestContext.connectionId;
 
+    console.log(`[connect] New connection: connectionId=${connectionId}, sessionId=${sessionId}, participantId=${participantId}, name=${name}`);
     await putConnection({
       connectionId,
       sessionId,

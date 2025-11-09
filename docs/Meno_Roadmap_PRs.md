@@ -212,9 +212,9 @@ Paths assume a Next.js + TypeScript web app using the `/app` directory and `page
 - [x] Implement Lambda `$connect` / `$disconnect` / route handlers (persist connection, chat messages, presence, leases).
 - [x] Broadcast events using API Gateway Management API; handle stale connections.
 - [x] Expose REST hydrators (chat history, presence snapshot, lease state) for new clients.
-- [ ] Wire web + tablet clients to hydrate from `/api/realtime/session/[sessionId]` and clear legacy state on join.
-- [ ] Switch web + tablet clients to broadcast/consume realtime actions (`chat.send`, `presence.update`, `control.lease.*`) end-to-end; drop deprecated `/api/chat` websocket usage.
-- [ ] Remove Next.js chat/presence websocket routes and legacy client code once the new path is stable.
+- [x] Wire web + tablet clients to hydrate from `/api/realtime/session/[sessionId]` and clear legacy state on join.
+- [x] Switch web + tablet clients to broadcast/consume realtime actions (`chat.send`, `presence.update`, `control.lease.*`) end-to-end; drop deprecated `/api/chat` websocket usage.
+- [x] Remove Next.js chat/presence websocket routes and legacy client code once the new path is stable.
 - [ ] Document environment variables / deployment steps for the new realtime channel (web + tablet).
 
 **Files**

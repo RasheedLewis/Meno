@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import {
-  GetCommand,
-  QueryCommand,
-} from "@aws-sdk/lib-dynamodb";
+import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
 import { getDocumentClient } from "@/lib/aws/dynamo";
 import { env } from "@/env";
+import type { ChatMessage } from "@/lib/types/chat";
 
 const DEFAULT_CHAT_LIMIT = 200;
 
@@ -89,17 +87,27 @@ export async function GET(
 
     const nowSeconds = Math.floor(Date.now() / 1000);
 
-    const messages =
-      chatResult.Items?.map((item) => ({
-        sessionId: item.sessionId as string,
-        messageId: item.messageId as string,
-        participantId: item.participantId as string | undefined,
-        participantName: item.participantName as string | undefined,
-        role: (item.role as string | undefined) ?? "student",
-        content: item.content as string,
-        createdAt: item.createdAt as string,
-        meta: item.meta as Record<string, unknown> | undefined,
-      })) ?? [];
+    const messages: ChatMessage[] =
+      chatResult.Items?.map((item) => {
+        const baseMeta =
+          (item.meta as ChatMessage["meta"] | undefined) ?? undefined;
+        return {
+          id: (item.messageId as string | undefined) ?? "",
+          role:
+            (item.role as ChatMessage["role"] | undefined) ?? "student",
+          content: item.content as string,
+          createdAt: item.createdAt as string,
+          meta: {
+            ...baseMeta,
+            sessionId: item.sessionId as string,
+            participantId: item.participantId as string | undefined,
+          },
+        };
+      })
+        ?.filter(
+          (message) => typeof message.id === "string" && message.id.length > 0,
+        )
+        ?? [];
 
     const participantsRaw = presenceResult.Items ?? [];
     const participants = participantsRaw

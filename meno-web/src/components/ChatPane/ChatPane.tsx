@@ -283,6 +283,7 @@ export function ChatPane({ className }: { className?: string }) {
     } else {
       setHeavyResult(null);
     }
+    console.log("[ChatPane] Broadcasting student message to WebSocket:", studentMessage.id);
     chatClient.sendMessage({
       id: studentMessage.id,
       content: studentMessage.content,
@@ -410,12 +411,21 @@ export function ChatPane({ className }: { className?: string }) {
           source: "system",
           channel: "public",
           tags: ["recap"],
+          sessionId: sessionId ?? undefined,
         },
       );
       if (options?.replace) {
         clearMessages();
       }
       addMessage(recapMessage);
+      console.log("[ChatPane] Broadcasting recap message to WebSocket:", recapMessage.id);
+      chatClient.sendMessage({
+        id: recapMessage.id,
+        content: recapMessage.content,
+        role: recapMessage.role,
+        createdAt: recapMessage.createdAt,
+        meta: recapMessage.meta,
+      });
       return;
     }
 
@@ -437,6 +447,7 @@ export function ChatPane({ className }: { className?: string }) {
       clearMessages();
     }
     addMessage(menoMessage);
+    console.log("[ChatPane] Broadcasting Meno message to WebSocket:", menoMessage.id);
     chatClient.sendMessage({
       id: menoMessage.id,
       content: menoMessage.content,

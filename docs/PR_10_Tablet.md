@@ -82,21 +82,20 @@ Enable a shared real-time handwriting workspace between the **web app** (host/te
 
 ### PR-10d — Lease & Control Channel
 
-**Goal:** Enforce single active line authority.
+**Goal:** Enforce single active line authority while keeping control flows simple enough to ship without websockets. All orchestration happens through REST endpoints so the tablet/web clients can poll or fire-and-forget without maintaining a socket connection.
 
-* Server maintains `activeLine` map `{stepIndex, leaseTo}`.
-* Tablet must hold lease to submit.
-* Host can “Take Lease”.
-* Control messages (non-CRDT):
-
-  ```
-  control.state
-  lease.grant|release
-  line.submit
-  check.result
-  hint.update
-  ```
-* **Tests:** race conditions, lease expiry, reconnect recovery.
+* Server keeps `activeLine` record `{ stepIndex, leaseTo, leaseIssuedAt, leaseExpiresAt }` in the session table.
+* REST endpoints:
+  * `POST /api/sessions/:sessionId/lease/take` → `{ stepIndex }` (host or student takes control of a given line).
+  * `POST /api/sessions/:sessionId/lease/release` → clears the lease (host override or auto-expire).
+  * `POST /api/sessions/:sessionId/lines/:stepIndex/submit` → stores pending stroke payload, fires solver pipeline.
+  * `GET /api/sessions/:sessionId/lease` → returns current state for polling clients.
+* Host "Take Control" button calls `lease/take` with the next available step index.
+* Tablet must successfully call `lease/take` before enabling draw/submit actions; it polls `GET lease` every few seconds (or after `submit`) to stay in sync.
+* When a new problem/session is created, the first line (`stepIndex = 0`) is auto-highlighted so the learner knows where to start.
+* Both web and tablet surfaces show a **Submit line** button that calls `lines/:stepIndex/submit` and then clears local ink buffer when solver ack returns.
+* Solver response and hint broadcasts remain deferred (handled in later PRs).
+* **Tests:** lease take/release race, REST idempotency, polling intervals, highlight resets on new problem, submit button states.
 
 ---
 

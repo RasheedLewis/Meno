@@ -39,18 +39,12 @@ type ServerEnvelope =
     };
 
 const buildWebsocketUrl = (sessionId: string, participantId: string, name: string, role: string) => {
-  const base = REALTIME_WS_URL ?? '';
-  if (!base) {
-    const fallback = API_BASE_URL.replace(/\/+$/, '').replace(/^http/, 'ws');
-    const url = new URL('/api/chat', fallback);
-    url.searchParams.set('sessionId', sessionId);
-    url.searchParams.set('participantId', participantId);
-    url.searchParams.set('name', name);
-    url.searchParams.set('role', role);
-    url.searchParams.set('client', 'tablet');
-    return url.toString();
+  if (!REALTIME_WS_URL) {
+    throw new Error(
+      'REALTIME_WS_URL must be defined (expo extra.realtimeWsUrl) to connect to the realtime channel',
+    );
   }
-  const url = new URL(base);
+  const url = new URL(REALTIME_WS_URL);
   url.searchParams.set('sessionId', sessionId);
   url.searchParams.set('participantId', participantId);
   url.searchParams.set('name', name);
