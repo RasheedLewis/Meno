@@ -27,6 +27,20 @@ export interface ActiveLineState {
   leaseExpiresAt: number;
 }
 
+export interface SessionLineSubmitter {
+  participantId?: string;
+  name?: string;
+  role?: "student" | "teacher" | "observer";
+}
+
+export interface SessionLineAttempt {
+  attemptId: string;
+  stepIndex: number;
+  strokes: unknown;
+  submitter?: SessionLineSubmitter;
+  createdAt: string;
+}
+
 export interface SessionRecord {
   sessionId: string;
   code: string;
@@ -38,6 +52,7 @@ export interface SessionRecord {
   maxParticipants?: number;
   participants: Record<string, SessionParticipant>;
   activeLine?: ActiveLineState | null;
+  attempts?: SessionLineAttempt[];
 }
 
 const TTL_SECONDS = 60 * 60 * 6; // 6 hours
@@ -119,6 +134,16 @@ const normalizeSessionRecord = (item: unknown): SessionRecord => {
   const record = item as SessionRecord;
   const participants = normalizeParticipantsMap((record as unknown as { participants?: unknown }).participants);
   const activeLine = normalizeActiveLine((record as unknown as { activeLine?: unknown }).activeLine);
+  const attempts =
+    Array.isArray((record as unknown as { attempts?: unknown }).attempts) ?
+      ((record as unknown as { attempts?: unknown }).attempts as SessionLineAttempt[]).map((attempt) => ({
+        attemptId: attempt.attemptId,
+        stepIndex: attempt.stepIndex,
+        strokes: attempt.strokes,
+        submitter: attempt.submitter,
+        createdAt: attempt.createdAt,
+      })) :
+      [];
 
   return {
     sessionId: record.sessionId,
@@ -131,6 +156,7 @@ const normalizeSessionRecord = (item: unknown): SessionRecord => {
     maxParticipants: record.maxParticipants,
     participants,
     activeLine: activeLine ?? null,
+    attempts,
   };
 };
 
@@ -287,4 +313,44 @@ export const clearActiveLineLease = async (sessionId: string): Promise<SessionRe
   );
 
   return response.Attributes ? normalizeSessionRecord(response.Attributes) : null;
+};
+
+interface AppendAttemptInput {
+  stepIndex: number;
+  strokes: unknown;
+  submitter?: SessionLineSubmitter;
+}
+
+export const appendSessionLineAttempt = async (
+  sessionId: string,
+  payload: AppendAttemptInput,
+): Promise<SessionLineAttempt> => {
+  if (!tableName) {
+    throw new Error("SESSION_TABLE_NAME must be configured");
+  }
+
+  const createdAt = new Date().toISOString();
+  const attempt: SessionLineAttempt = {
+    attemptId: randomId("attempt"),
+    stepIndex: payload.stepIndex,
+    strokes: payload.strokes,
+    submitter: payload.submitter,
+    createdAt,
+  };
+
+  await client.send(
+    new UpdateCommand({
+      TableName: tableName,
+      Key: { sessionId },
+      UpdateExpression:
+        "SET attempts = list_append(if_not_exists(attempts, :emptyList), :attempt), expiresAt = :expiresAt",
+      ExpressionAttributeValues: {
+        ":attempt": [attempt],
+        ":emptyList": [],
+        ":expiresAt": computeExpiry(),
+      },
+    }),
+  );
+
+  return attempt;
 };

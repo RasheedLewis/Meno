@@ -1,0 +1,101 @@
+import { NextResponse } from "next/server";
+
+import {
+  appendSessionLineAttempt,
+  getSessionById,
+  setActiveLineLease,
+} from "@/lib/session/store";
+
+interface Params {
+  sessionId: string;
+  stepIndex: string;
+}
+
+interface SubmitBody {
+  strokes: unknown;
+  leaseTo?: string | null;
+  submitter?: {
+    participantId?: string;
+    name?: string;
+    role?: string;
+  };
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<Params> },
+): Promise<Response> {
+  const { sessionId, stepIndex } = await context.params;
+
+  if (!sessionId) {
+    return NextResponse.json(
+      { ok: false, error: "sessionId is required" },
+      { status: 400 },
+    );
+  }
+
+  const parsedStepIndex = Number(stepIndex);
+  if (!Number.isFinite(parsedStepIndex) || parsedStepIndex < 0) {
+    return NextResponse.json(
+      { ok: false, error: "stepIndex must be a non-negative number" },
+      { status: 400 },
+    );
+  }
+
+  let body: SubmitBody | null = null;
+  try {
+    body = (await request.json()) as SubmitBody;
+  } catch {
+    // handled below
+  }
+
+  if (!body || body.strokes === undefined || body.strokes === null) {
+    return NextResponse.json(
+      { ok: false, error: "strokes payload is required" },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const session = await getSessionById(sessionId);
+    if (!session) {
+      return NextResponse.json(
+        { ok: false, error: "Session not found" },
+        { status: 404 },
+      );
+    }
+
+    const attempt = await appendSessionLineAttempt(sessionId, {
+      stepIndex: parsedStepIndex,
+      strokes: body.strokes,
+      submitter: body.submitter,
+    });
+
+    // Auto advance lease to next line if requested
+    const nextStepIndex = parsedStepIndex + 1;
+    await setActiveLineLease(sessionId, {
+      stepIndex: nextStepIndex,
+      leaseTo: body.leaseTo ?? null,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      data: {
+        attempt,
+        nextActiveLine: {
+          stepIndex: nextStepIndex,
+          leaseTo: body.leaseTo ?? null,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Line submit failed", error);
+    const message =
+      error instanceof Error ? error.message : "Unknown line submit error";
+    return NextResponse.json(
+      { ok: false, error: message },
+      { status: 500 },
+    );
+  }
+}
+
