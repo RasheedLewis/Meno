@@ -1,3 +1,5 @@
+import { randomUUID } from "crypto";
+
 import { NextResponse } from "next/server";
 
 import {
@@ -70,27 +72,40 @@ export async function POST(
       );
     }
 
+    const snapshotProvided =
+      typeof body.snapshot === "string" && body.snapshot.length > 0;
+    const shouldAttemptSolver = snapshotProvided && mathpixEnabled;
+
     let solverError: string | null = null;
+    let shouldAdvance = !snapshotProvided || !mathpixEnabled;
     let solverOutcome = null;
 
-    if (typeof body.snapshot === "string" && body.snapshot.length > 0) {
-      if (mathpixEnabled) {
-        const solverResult = await recognizeHandwriting(body.snapshot);
-        if (solverResult.ok) {
-          solverOutcome = {
-            expression: solverResult.expression,
-            correctness: "unknown" as const,
-            usefulness: "unknown" as const,
-            confidence: solverResult.confidence,
-            provider: solverResult.provider,
-            raw: solverResult.raw,
-          };
-        } else {
-          solverError = solverResult.error;
-        }
+    if (shouldAttemptSolver) {
+      const solverResult = await recognizeHandwriting(body.snapshot!);
+      if (solverResult.ok) {
+        shouldAdvance = true;
+        solverOutcome = {
+          expression: solverResult.expression,
+          correctness: "correct" as const,
+          usefulness: "useful" as const,
+          confidence: solverResult.confidence,
+          provider: solverResult.provider,
+          raw: solverResult.raw,
+        };
       } else {
-        solverError = "Mathpix credentials not configured";
+        shouldAdvance = false;
+        solverError = solverResult.error;
+        solverOutcome = {
+          expression: null,
+          correctness: "incorrect" as const,
+          usefulness: "neutral" as const,
+          confidence: null,
+          provider: solverResult.provider,
+          raw: solverResult.raw ?? null,
+        };
       }
+    } else if (snapshotProvided && !mathpixEnabled) {
+      solverError = "Mathpix credentials not configured";
     }
 
     const attempt = await appendSessionLineAttempt(sessionId, {
@@ -101,21 +116,38 @@ export async function POST(
       solver: solverOutcome,
     });
 
-    // Auto advance lease to next line if requested
-    const nextStepIndex = parsedStepIndex + 1;
-    await setActiveLineLease(sessionId, {
-      stepIndex: nextStepIndex,
-      leaseTo: body.leaseTo ?? null,
-    });
+    let nextActiveLine = session.activeLine ?? null;
+
+    if (shouldAdvance) {
+      const updated = await setActiveLineLease(sessionId, {
+        stepIndex: parsedStepIndex + 1,
+        leaseTo: body.leaseTo ?? null,
+      });
+      nextActiveLine =
+        updated?.activeLine ??
+        nextActiveLine ?? {
+          leaseId: randomUUID(),
+          stepIndex: parsedStepIndex + 1,
+          leaseTo: body.leaseTo ?? null,
+          leaseIssuedAt: new Date().toISOString(),
+          leaseExpiresAt: Date.now() + 30_000,
+        };
+    } else if (!nextActiveLine) {
+      nextActiveLine = {
+        leaseId: randomUUID(),
+        stepIndex: parsedStepIndex,
+        leaseTo: body.leaseTo ?? null,
+        leaseIssuedAt: new Date().toISOString(),
+        leaseExpiresAt: Date.now() + 30_000,
+      };
+    }
 
     return NextResponse.json({
       ok: true,
       data: {
         attempt,
-        nextActiveLine: {
-          stepIndex: nextStepIndex,
-          leaseTo: body.leaseTo ?? null,
-        },
+        nextActiveLine,
+        advanced: shouldAdvance,
         solverError,
       },
     });

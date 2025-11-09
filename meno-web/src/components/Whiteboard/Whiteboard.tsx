@@ -82,6 +82,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
   }, [activeLine?.leaseTo, localParticipantId, localColor, presenceParticipants]);
 
   const [leaseCountdown, setLeaseCountdown] = useState<number>(0);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const canDraw = !activeLine?.leaseTo || activeLine.leaseTo === localParticipantId;
   const drawDisabledReason = !canDraw
@@ -235,25 +236,31 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
         });
         return;
       }
-      const { nextActiveLine, solverError, attempt } = response.data;
+      const { nextActiveLine, solverError, attempt, advanced } = response.data;
       setRecentAttempt(attempt);
-      setActiveLineState({
-        leaseId: crypto.randomUUID?.() ?? `lease-${Date.now()}`,
-        stepIndex: nextActiveLine.stepIndex,
-        leaseTo: nextActiveLine.leaseTo,
-        leaseIssuedAt: new Date().toISOString(),
-        leaseExpiresAt: Date.now() + 30_000,
-      });
-      showToast({
-        variant: "success",
-        title: "Step accepted",
-        description: "Nice work. Move on to the next line.",
-      });
-      if (solverError) {
+      if (nextActiveLine) {
+        setActiveLineState(nextActiveLine);
+      } else {
+        setActiveLineState(null);
+      }
+
+      if (advanced) {
+        const successMessage = "Correct step! Move on to the next line.";
+        setFeedback({ type: "success", message: successMessage });
+        showToast({
+          variant: "success",
+          title: "Step accepted",
+          description: successMessage,
+        });
+      } else {
+        const failureMessage =
+          solverError ??
+          "This step needs a bit more work. Try explaining how it moves toward the answer.";
+        setFeedback({ type: "error", message: failureMessage });
         showToast({
           variant: "warning",
-          title: "Solver unavailable",
-          description: solverError,
+          title: "Try again",
+          description: failureMessage,
         });
       }
     } catch (error) {
@@ -272,9 +279,16 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
     localDisplayName,
     localParticipantId,
     setActiveLineState,
+    setRecentAttempt,
     sessionId,
     strokes,
   ]);
+
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = window.setTimeout(() => setFeedback(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
 
   const appendToStroke = useCallback(
     (strokeId: string, points: CanvasPoint[]) => appendToStrokeInternal(strokeId, points),
@@ -547,6 +561,23 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
           >
             {isSubmitting ? "Submitting…" : "Submit Line"}
           </Button>
+        </div>
+      ) : null}
+      {feedback ? (
+        <div className="pointer-events-none absolute top-[calc(env(safe-area-inset-top)+6rem)] left-1/2 flex -translate-x-1/2">
+          <div
+            className={cn(
+              "pointer-events-auto flex items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-soft backdrop-blur",
+              feedback.type === "success"
+                ? "border-emerald-200 bg-emerald-100/95 text-emerald-700"
+                : "border-rose-200 bg-rose-100/95 text-rose-700",
+            )}
+            role="status"
+            aria-live="polite"
+          >
+            <span className="inline-block h-2.5 w-2.5 rounded-full border border-white/60 shadow-inner" />
+            <span>{feedback.message}</span>
+          </div>
         </div>
       ) : null}
     </div>

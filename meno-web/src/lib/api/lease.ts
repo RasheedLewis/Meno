@@ -1,4 +1,8 @@
-import type { ActiveLineLease, SessionLineAttempt, SessionLineSubmitter } from "@/lib/store/session";
+import type {
+  ActiveLineLease,
+  SessionLineAttempt,
+  SessionLineSubmitter,
+} from "@/lib/store/session";
 
 export interface LeaseStateResponse {
   ok: true;
@@ -50,10 +54,8 @@ export interface SubmitLineResponse {
   ok: true;
   data: {
     attempt: SessionLineAttempt;
-    nextActiveLine: {
-      stepIndex: number;
-      leaseTo: string | null;
-    };
+    nextActiveLine: ActiveLineLease | null;
+    advanced: boolean;
     solverError: string | null;
   };
 }
