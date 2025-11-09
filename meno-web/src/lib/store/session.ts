@@ -27,6 +27,19 @@ export interface SessionLineAttempt {
   submitter?: SessionLineSubmitter;
   createdAt: string;
   snapshot?: string | null;
+  solver?: SessionLineSolverOutcome | null;
+}
+
+export type SolverCorrectness = "correct" | "incorrect" | "unknown";
+export type SolverUsefulness = "useful" | "neutral" | "unknown";
+
+export interface SessionLineSolverOutcome {
+  expression: string | null;
+  correctness: SolverCorrectness;
+  usefulness: SolverUsefulness;
+  confidence: number | null;
+  provider?: string;
+  raw?: unknown;
 }
 
 export interface Participant {

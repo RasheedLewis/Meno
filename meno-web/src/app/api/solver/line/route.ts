@@ -1,78 +1,16 @@
 import { NextResponse } from "next/server";
 
-import { env } from "@/env";
+import {
+  recognizeHandwriting,
+  mathpixEnabled,
+  type MathpixResult,
+} from "@/lib/solver/mathpix";
 
 interface SolverRequestBody {
   sessionId: string;
   stepIndex: number;
   snapshot: string;
   strokes?: unknown;
-}
-
-interface MathpixRequestBody {
-  src: string;
-  formats: string[];
-  data_options?: {
-    include_asciimath?: boolean;
-    include_latex?: boolean;
-    include_mathml?: boolean;
-  };
-}
-
-interface MathpixResponse {
-  latex_styled?: string;
-  latex_normal?: string;
-  text?: string;
-  error?: string;
-  data?: {
-    confidence?: number;
-  };
-}
-
-const MATHPIX_APP_ID = process.env.MATHPIX_APP_ID ?? env.MATHPIX_APP_ID;
-const MATHPIX_APP_KEY = process.env.MATHPIX_APP_KEY ?? env.MATHPIX_APP_KEY;
-
-const mathpixEnabled = Boolean(MATHPIX_APP_ID && MATHPIX_APP_KEY);
-
-async function callMathpix(snapshot: string): Promise<MathpixResponse> {
-  if (!mathpixEnabled) {
-    return {
-      latex_normal: "",
-      text: "",
-      error: "Mathpix credentials not configured",
-    };
-  }
-
-  const body: MathpixRequestBody = {
-    src: snapshot,
-    formats: ["latex_styled", "latex_normal", "asciimath"],
-    data_options: {
-      include_asciimath: true,
-      include_latex: true,
-      include_mathml: false,
-    },
-  };
-
-  const response = await fetch("https://api.mathpix.com/v3/text", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      app_id: MATHPIX_APP_ID!,
-      app_key: MATHPIX_APP_KEY!,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    return {
-      latex_normal: "",
-      text: "",
-      error: `Mathpix error: ${response.status} ${message}`,
-    };
-  }
-
-  return (await response.json()) as MathpixResponse;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -99,17 +37,17 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const ocrResult = await callMathpix(payload.snapshot);
+    const ocrResult: MathpixResult = await recognizeHandwriting(payload.snapshot);
 
-    if (ocrResult.error) {
+    if (!ocrResult.ok) {
       console.error("Mathpix OCR error", ocrResult.error);
       return NextResponse.json(
         {
           ok: false,
           error: ocrResult.error,
           data: {
-            expression: ocrResult.latex_normal ?? null,
-            raw: ocrResult,
+            expression: null,
+            raw: ocrResult.raw ?? null,
           },
         },
         { status: 502 },
@@ -121,10 +59,10 @@ export async function POST(request: Request): Promise<Response> {
       data: {
         sessionId: payload.sessionId,
         stepIndex: payload.stepIndex,
-        expression: ocrResult.latex_normal ?? ocrResult.latex_styled ?? null,
-        text: ocrResult.text ?? null,
-        confidence: ocrResult.data?.confidence ?? null,
-        raw: ocrResult,
+        expression: ocrResult.expression,
+        confidence: ocrResult.confidence,
+        provider: ocrResult.provider,
+        raw: ocrResult.raw,
       },
     });
   } catch (error) {

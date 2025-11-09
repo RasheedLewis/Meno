@@ -5,6 +5,10 @@ import {
   getSessionById,
   setActiveLineLease,
 } from "@/lib/session/store";
+import {
+  mathpixEnabled,
+  recognizeHandwriting,
+} from "@/lib/solver/mathpix";
 
 interface Params {
   sessionId: string;
@@ -66,11 +70,35 @@ export async function POST(
       );
     }
 
+    let solverError: string | null = null;
+    let solverOutcome = null;
+
+    if (typeof body.snapshot === "string" && body.snapshot.length > 0) {
+      if (mathpixEnabled) {
+        const solverResult = await recognizeHandwriting(body.snapshot);
+        if (solverResult.ok) {
+          solverOutcome = {
+            expression: solverResult.expression,
+            correctness: "unknown" as const,
+            usefulness: "unknown" as const,
+            confidence: solverResult.confidence,
+            provider: solverResult.provider,
+            raw: solverResult.raw,
+          };
+        } else {
+          solverError = solverResult.error;
+        }
+      } else {
+        solverError = "Mathpix credentials not configured";
+      }
+    }
+
     const attempt = await appendSessionLineAttempt(sessionId, {
       stepIndex: parsedStepIndex,
       strokes: body.strokes,
       submitter: body.submitter,
       snapshot: typeof body.snapshot === "string" ? body.snapshot : null,
+      solver: solverOutcome,
     });
 
     // Auto advance lease to next line if requested
@@ -88,6 +116,7 @@ export async function POST(
           stepIndex: nextStepIndex,
           leaseTo: body.leaseTo ?? null,
         },
+        solverError,
       },
     });
   } catch (error) {

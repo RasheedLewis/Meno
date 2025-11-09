@@ -234,7 +234,7 @@ Paths assume a Next.js + TypeScript web app using the `/app` directory and `page
 **Subtasks**
 - [x] Capture the highlighted band to an off-screen canvas and include the cropped PNG with `lines/:stepIndex/submit`.
 - [x] Add `/api/solver/line` endpoint that forwards snapshots to handwriting OCR (e.g., Mathpix) and normalizes expressions for the solver.
-- [ ] Persist solver outcomes with `SessionLineAttempt` (expression, correctness, usefulness, confidence).
+- [x] Persist solver outcomes with `SessionLineAttempt` (expression, correctness, usefulness, confidence).
 - [ ] Update web host UI to show success/failure states, trigger hints, and auto-advance highlight on success.
 - [ ] Mirror the feedback flow on the tablet client (toast/overlay, retry path).
 - [ ] Tests: OCR golden set, solver regression on decoded expressions, UI states for pass/fail.

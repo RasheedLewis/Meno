@@ -144,6 +144,19 @@ const normalizeSessionRecord = (item: unknown): SessionRecord => {
         submitter: attempt.submitter,
         createdAt: attempt.createdAt,
         snapshot: attempt.snapshot ?? null,
+        solver: attempt.solver
+          ? {
+              expression: attempt.solver.expression ?? null,
+              correctness: attempt.solver.correctness ?? "unknown",
+              usefulness: attempt.solver.usefulness ?? "unknown",
+              confidence:
+                typeof attempt.solver.confidence === "number"
+                  ? attempt.solver.confidence
+                  : null,
+              provider: attempt.solver.provider,
+              raw: attempt.solver.raw,
+            }
+          : null,
       })) :
       [];
 
@@ -322,6 +335,7 @@ interface AppendAttemptInput {
   strokes: unknown;
   submitter?: SessionLineSubmitter;
   snapshot?: string | null;
+  solver?: SessionLineSolverOutcome | null;
 }
 
 export const appendSessionLineAttempt = async (
@@ -340,6 +354,7 @@ export const appendSessionLineAttempt = async (
     submitter: payload.submitter,
     createdAt,
     snapshot: payload.snapshot ?? null,
+    solver: payload.solver ?? null,
   };
 
   await client.send(

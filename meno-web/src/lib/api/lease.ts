@@ -54,6 +54,7 @@ export interface SubmitLineResponse {
       stepIndex: number;
       leaseTo: string | null;
     };
+    solverError: string | null;
   };
 }
 

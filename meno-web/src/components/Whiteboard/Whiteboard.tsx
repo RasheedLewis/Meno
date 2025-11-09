@@ -49,6 +49,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
   const sessionParticipants = useSessionStore((state) => state.participants);
   const activeLine = useSessionStore((state) => state.activeLine);
   const setActiveLineState = useSessionStore((state) => state.setActiveLine);
+  const setRecentAttempt = useSessionStore((state) => state.setRecentAttempt);
   const sessionId = useSessionStore((state) => state.sessionId);
 
   const localColor = useMemo(() => {
@@ -234,7 +235,8 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
         });
         return;
       }
-      const { nextActiveLine } = response.data;
+      const { nextActiveLine, solverError, attempt } = response.data;
+      setRecentAttempt(attempt);
       setActiveLineState({
         leaseId: crypto.randomUUID?.() ?? `lease-${Date.now()}`,
         stepIndex: nextActiveLine.stepIndex,
@@ -247,6 +249,13 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
         title: "Step accepted",
         description: "Nice work. Move on to the next line.",
       });
+      if (solverError) {
+        showToast({
+          variant: "warning",
+          title: "Solver unavailable",
+          description: solverError,
+        });
+      }
     } catch (error) {
       console.error("Submit line failed", error);
       showToast({
