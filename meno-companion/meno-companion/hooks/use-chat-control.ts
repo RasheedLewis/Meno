@@ -70,6 +70,57 @@ export const useChatControl = ({
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    if (!sessionId) {
+      setActiveLine(null);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const hydrate = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/realtime/session/${sessionId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          signal: controller.signal,
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload?.ok || !payload.data) {
+          throw new Error(payload?.error ?? 'Realtime hydrate failed');
+        }
+
+        if (cancelled) return;
+
+        if (payload.data.activeLine) {
+          const lease = payload.data.activeLine as ActiveLineLease;
+          setActiveLine({
+            leaseId: lease.leaseId,
+            stepIndex: lease.stepIndex,
+            leaseTo: lease.leaseTo,
+            leaseIssuedAt: lease.leaseIssuedAt,
+            leaseExpiresAt: lease.leaseExpiresAt,
+          });
+        } else {
+          setActiveLine(null);
+        }
+      } catch (error) {
+        if (controller.signal.aborted || cancelled) return;
+        console.warn('[Companion Chat] Failed to hydrate realtime snapshot', error);
+      }
+    };
+
+    void hydrate();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [sessionId]);
+
+  useEffect(() => {
     if (!sessionId || !participantId) {
       return () => {
         wsRef.current?.close();

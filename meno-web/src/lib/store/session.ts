@@ -153,7 +153,6 @@ export const useSessionStore = create<SessionState>()(
           hspPlanId: null,
           hspPlan: null,
         })),
-      realtimeChannel: null,
       resetSession: () => set({ ...baseSession }),
     }),
     {

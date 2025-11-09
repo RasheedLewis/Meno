@@ -101,22 +101,40 @@ export async function GET(
         meta: item.meta as Record<string, unknown> | undefined,
       })) ?? [];
 
-    const participants =
-      presenceResult.Items?.filter((item) => {
+    const participantsRaw = presenceResult.Items ?? [];
+    const participants = participantsRaw
+      .filter((item) => {
         const expiresAt = item.expiresAt as number | undefined;
         return !expiresAt || expiresAt >= nowSeconds;
-      }).map((item) => ({
-        sessionId: item.sessionId as string,
-        participantId: item.participantId as string,
-        name: (item.name as string | undefined) ?? null,
-        role: (item.role as string | undefined) ?? "student",
-        status: (item.status as string | undefined) ?? "online",
-        isTyping: Boolean(item.isTyping),
-        isSpeaking: Boolean(item.isSpeaking),
-        lastSeen: (item.lastSeen as string | undefined) ?? null,
-        color: (item.color as string | undefined) ?? "#B47538",
-        extra: (item.extra as Record<string, unknown> | undefined) ?? undefined,
-      })) ?? [];
+      })
+      .map((item) => {
+        const participantId = item.participantId as string | undefined;
+        if (!participantId) {
+          return null;
+        }
+        return {
+          sessionId,
+          participantId,
+          name: (item.name as string | undefined) ?? "Participant",
+          role: (item.role as string | undefined) ?? "student",
+          color: (item.color as string | undefined) ?? "#B47538",
+          status: (item.status as string | undefined) ?? "online",
+          isTyping: Boolean(item.isTyping),
+          isSpeaking: Boolean(item.isSpeaking),
+          lastSeen: (item.lastSeen as string | undefined) ?? new Date().toISOString(),
+          muted: item.muted,
+          addressed: item.addressed,
+          caption: item.caption,
+          expiresAt: typeof item.expiresAt === "number" ? item.expiresAt : undefined,
+          extra: (item.extra as Record<string, unknown> | undefined) ?? undefined,
+        };
+      })
+      .filter((value): value is NonNullable<typeof value> => value !== null);
+
+    const typingIds = participants
+      .filter((participant) => participant.isTyping)
+      .map((participant) => participant.participantId);
+    const typingSummary = typingIds.length === 0 ? "none" : typingIds.length === 1 ? "single" : "multiple";
 
     const activeLine = sessionResult.Item?.activeLine ?? null;
 
@@ -130,7 +148,8 @@ export async function GET(
         },
         presence: {
           participants,
-          count: participants.length,
+          typingSummary,
+          typingIds,
         },
         activeLine,
       },

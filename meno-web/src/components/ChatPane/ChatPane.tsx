@@ -8,7 +8,9 @@ import { showToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
 import { chatClient } from "@/lib/chat/client";
 import { presenceClient } from "@/lib/presence/client";
+import { fetchRealtimeSnapshot } from "@/lib/realtime/api";
 import { createChatMessage, useChatStore } from "@/lib/store/chat";
+import { usePresenceStore } from "@/lib/store/presence";
 import { useSessionStore } from "@/lib/store/session";
 import type {
   DialogueContextTurn,
@@ -68,6 +70,61 @@ export function ChatPane({ className }: { className?: string }) {
   const participantName = useSessionStore((state) => state.participantName);
   const participantRole = useSessionStore((state) => state.role);
   const planId = hspPlan?.id ?? hspPlanId;
+  useEffect(() => {
+    if (!sessionId) {
+      clearMessages();
+      usePresenceStore.getState().reset();
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    clearMessages();
+    usePresenceStore.getState().reset();
+    usePresenceStore.getState().setConnectionState("connecting");
+
+    (async () => {
+      try {
+        const snapshot = await fetchRealtimeSnapshot(sessionId, { signal: controller.signal });
+        if (cancelled) {
+          return;
+        }
+
+        useChatStore.getState().setMessages(snapshot.chat.messages ?? []);
+
+        const presenceRecords = (snapshot.presence.participants ?? []).map((participant) => ({
+          ...participant,
+          name: participant.name ?? "Participant",
+          role: participant.role ?? "student",
+          color: participant.color ?? "#B47538",
+          lastSeen: participant.lastSeen ?? new Date().toISOString(),
+        }));
+
+        usePresenceStore
+          .getState()
+          .setParticipants(
+            presenceRecords,
+            snapshot.presence.typingSummary,
+            snapshot.presence.typingIds,
+          );
+        usePresenceStore.getState().setConnectionState("open");
+        useSessionStore.getState().setActiveLine(snapshot.activeLine ?? null);
+      } catch (error) {
+        if (controller.signal.aborted || cancelled) {
+          return;
+        }
+        console.error("[ChatPane] Failed to hydrate realtime snapshot", error);
+        usePresenceStore.getState().setConnectionState("error");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [sessionId, clearMessages]);
+
 
   const [input, setInput] = useState("");
   const [instructions, setInstructions] = useState<string | null>(null);
