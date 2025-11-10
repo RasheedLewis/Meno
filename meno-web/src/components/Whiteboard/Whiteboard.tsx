@@ -22,6 +22,7 @@ import { usePresenceStore } from "@/lib/store/presence";
 import { useSessionStore } from "@/lib/store/session";
 import { useYjs } from "@/lib/whiteboard/provider";
 import { chatClient } from "@/lib/chat/client";
+import type { HeavyValidationRecord } from "@/lib/dialogue/types";
 import {
   fetchLease,
   releaseLease as releaseLeaseApi,
@@ -84,6 +85,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
 
   const [leaseCountdown, setLeaseCountdown] = useState<number>(0);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [hostHint, setHostHint] = useState<string | null>(null);
 
   const canDraw = !activeLine?.leaseTo || activeLine.leaseTo === localParticipantId;
   const drawDisabledReason = !canDraw
@@ -110,6 +112,51 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
   }, [activeLine?.leaseId, activeLine?.leaseExpiresAt, setActiveLineState]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const notifyDialogue = useCallback(
+    async ({
+      advance,
+      expression,
+      heavyCheck,
+    }: {
+      advance: boolean;
+      expression?: string;
+      heavyCheck?: HeavyValidationRecord;
+    }) => {
+      if (!sessionId || !hspPlanId) {
+        return null;
+      }
+
+      try {
+        const response = await fetch("/api/meno", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            planId: hspPlanId,
+            advance,
+            studentTurn: {
+              outcome: advance ? "productive" : "unproductive",
+              content: expression,
+            },
+            heavyCheck,
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload?.ok) {
+          if (payload?.error) {
+            console.warn("Dialogue update failed", payload.error);
+          }
+          return null;
+        }
+        return payload.data as { hint?: string | null };
+      } catch (error) {
+        console.warn("Dialogue update failed", error);
+        return null;
+      }
+    },
+    [hspPlanId, sessionId],
+  );
 
   const handleTakeControl = useCallback(async () => {
     if (!sessionId || !localParticipantId) return;
@@ -286,6 +333,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
           ? `Nice! "${solver.expression}" keeps the solution moving.`
           : "Correct step! Move on to the next line.";
         setFeedback({ type: "success", message: successMessage });
+        setHostHint(null);
         showToast({
           variant: "success",
           title: "Step accepted",
@@ -302,6 +350,20 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
           variant: "warning",
           title: "Try again",
           description: failureMessage,
+        });
+      }
+
+      if (hspPlanId) {
+        void notifyDialogue({
+          advance: advanced,
+          expression: solver?.expression ?? undefined,
+          heavyCheck: solver?.heavy,
+        }).then((dialogue) => {
+          if (dialogue?.hint) {
+            setHostHint(dialogue.hint);
+          } else if (advanced) {
+            setHostHint(null);
+          }
         });
       }
     } catch (error) {
@@ -323,7 +385,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
     setRecentAttempt,
     sessionId,
     strokes,
-    hspPlanId,
+    notifyDialogue,
   ]);
 
   useEffect(() => {
@@ -331,6 +393,10 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
     const timer = window.setTimeout(() => setFeedback(null), 2400);
     return () => window.clearTimeout(timer);
   }, [feedback]);
+
+  useEffect(() => {
+    setHostHint(null);
+  }, [hspPlanId]);
 
   const appendToStroke = useCallback(
     (strokeId: string, points: CanvasPoint[]) => appendToStrokeInternal(strokeId, points),
@@ -619,6 +685,14 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
           >
             <span className="inline-block h-2.5 w-2.5 rounded-full border border-white/60 shadow-inner" />
             <span>{feedback.message}</span>
+          </div>
+        </div>
+      ) : null}
+      {hostHint ? (
+        <div className="pointer-events-none absolute bottom-[max(2.75rem,calc(env(safe-area-inset-bottom)+2rem))] left-1/2 flex -translate-x-1/2 px-4">
+          <div className="pointer-events-auto max-w-2xl rounded-3xl border border-[var(--border)] bg-[var(--paper)]/95 px-5 py-3 text-sm font-sans text-[var(--ink)] shadow-soft backdrop-blur">
+            <span className="mr-3 font-semibold uppercase tracking-[0.35em] text-[var(--accent)]">Hint</span>
+            <span>{hostHint}</span>
           </div>
         </div>
       ) : null}

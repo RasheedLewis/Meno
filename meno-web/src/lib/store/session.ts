@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 import type { HspPlan } from "@/lib/hsp/schema";
+import type { HeavyValidationRecord } from "@/lib/dialogue/types";
 export type ParticipantRole = "student" | "teacher" | "observer";
 export type SessionPhase = "idle" | "joining" | "active" | "completed";
 export type SessionDifficulty = "beginner" | "intermediate" | "advanced";
@@ -40,6 +41,7 @@ export interface SessionLineSolverOutcome {
   confidence: number | null;
   provider?: string;
   raw?: unknown;
+  heavy?: HeavyValidationRecord;
 }
 
 export interface Participant {
