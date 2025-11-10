@@ -22,6 +22,11 @@ import { extractQuickCheckConfig } from "@/lib/validate/client";
 import { runHeavyCheck } from "@/lib/validate/server";
 import type { HeavyValidationRecord } from "@/lib/dialogue/types";
 
+type ParticipantRole = "student" | "teacher" | "observer";
+
+const isParticipantRole = (value: unknown): value is ParticipantRole =>
+  value === "student" || value === "teacher" || value === "observer";
+
 const extractEquation = (source?: string | null): string | null => {
   if (!source) return null;
   const lines = source
@@ -71,7 +76,12 @@ const computeSolutionSet = (equation: string): string[] | null => {
   try {
     const normalized = sanitizeEquation(equation);
     const variable = detectVariable(normalized) ?? "x";
-    const solutions = nerdamer.solveEquations(normalized, variable);
+    const solveEquations = (nerdamer as { solveEquations?: (eq: string, variable: string) => unknown }).solveEquations;
+    if (typeof solveEquations !== "function") {
+      console.warn("nerdamer.solveEquations is not available");
+      return null;
+    }
+    const solutions = solveEquations(normalized, variable);
     if (!Array.isArray(solutions)) {
       return null;
     }
@@ -216,7 +226,7 @@ export async function POST(
               expectedUnits,
             });
             correctness = heavy.equivalent ? "correct" : "incorrect";
-            usefulness = heavy.equivalent ? "useful" : "neutral";
+            usefulness = heavy.equivalent ? "useful" : "not_useful";
             shouldAdvance = heavy.equivalent;
             heavyRecord = {
               equivalent: heavy.equivalent,
@@ -231,16 +241,16 @@ export async function POST(
             solverError =
               error instanceof Error ? error.message : "Solver comparison failed";
             correctness = "unknown";
-            usefulness = "neutral";
+            usefulness = "unknown";
             shouldAdvance = false;
           }
         } else if (expression) {
           correctness = "unknown";
-          usefulness = "neutral";
+          usefulness = "unknown";
           shouldAdvance = false;
         } else {
           correctness = "incorrect";
-          usefulness = "neutral";
+          usefulness = "not_useful";
           shouldAdvance = false;
         }
 
@@ -262,7 +272,7 @@ export async function POST(
         solverOutcome = {
           expression: null,
           correctness: "incorrect",
-          usefulness: "neutral",
+          usefulness: "not_useful",
           confidence: null,
           provider: solverResult.provider,
           raw: {
@@ -285,7 +295,7 @@ export async function POST(
         solverOutcome = {
           ...solverOutcome,
           correctness: equivalent ? "correct" : "incorrect",
-          usefulness: equivalent ? "useful" : "neutral",
+          usefulness: equivalent ? "useful" : "not_useful",
           heavy: {
             equivalent,
             unitsMatch: true,
@@ -305,10 +315,21 @@ export async function POST(
       }
     }
 
+    const submitter =
+      body.submitter && typeof body.submitter === "object"
+        ? {
+            participantId: body.submitter.participantId,
+            name: body.submitter.name,
+            role: isParticipantRole(body.submitter.role)
+              ? body.submitter.role
+              : undefined,
+          }
+        : undefined;
+
     const attempt = await appendSessionLineAttempt(sessionId, {
       stepIndex: parsedStepIndex,
       strokes: body.strokes,
-      submitter: body.submitter,
+      submitter,
       snapshot: typeof body.snapshot === "string" ? body.snapshot : null,
       solver: solverOutcome,
     });

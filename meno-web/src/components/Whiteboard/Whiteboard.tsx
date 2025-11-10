@@ -347,7 +347,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
             : "This step needs a bit more work. Try explaining how it moves toward the answer.");
         setFeedback({ type: "error", message: failureMessage });
         showToast({
-          variant: "warning",
+          variant: "error",
           title: "Try again",
           description: failureMessage,
         });
@@ -661,7 +661,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
             )}
           </div>
           <Button
-            variant="success"
+            variant="primary"
             size="lg"
             className="pointer-events-auto rounded-full px-6"
             onClick={handleSubmitStep}

@@ -33,6 +33,16 @@ export interface SessionLineSubmitter {
   role?: "student" | "teacher" | "observer";
 }
 
+export interface SessionLineSolverOutcome {
+  expression?: string | null;
+  correctness?: "correct" | "incorrect" | "unknown";
+  usefulness?: "useful" | "not_useful" | "unknown";
+  confidence?: number | null;
+  provider?: string | null;
+  raw?: unknown;
+  heavy?: unknown;
+}
+
 export interface SessionLineAttempt {
   attemptId: string;
   stepIndex: number;
@@ -40,6 +50,7 @@ export interface SessionLineAttempt {
   submitter?: SessionLineSubmitter;
   createdAt: string;
   snapshot?: string | null;
+  solver?: SessionLineSolverOutcome | null;
 }
 
 export interface SessionRecord {

@@ -4,7 +4,8 @@ export type PresenceStatus =
   | "speaking"
   | "disconnected"
   | "muted"
-  | "reconnecting";
+  | "reconnecting"
+  | "offline";
 
 export interface PresenceRecord {
   sessionId: string;
