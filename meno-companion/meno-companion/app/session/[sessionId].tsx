@@ -9,6 +9,7 @@ import { useSharedCanvas } from '@/hooks/use-shared-canvas';
 import { useSessionYjs } from '@/hooks/use-session-yjs';
 import { useChatControl } from '@/hooks/use-chat-control';
 import { randomId } from '@/lib/randomId';
+import { submitLine } from '@/lib/api/lease';
 
 export default function SessionScreen() {
   const params = useLocalSearchParams<{ sessionId?: string }>();
@@ -43,7 +44,7 @@ export default function SessionScreen() {
     participantId: localParticipantId ?? undefined,
   });
 
-  const { activeLine, isMutating, isHydrating, takeControl, releaseControl } = useChatControl({
+  const { activeLine, isMutating, isHydrating, takeControl, releaseControl, setActiveLineState } = useChatControl({
     sessionId,
     participantId: localParticipantId,
     name: displayName,
@@ -73,6 +74,8 @@ export default function SessionScreen() {
   );
 
   const [leaseCountdown, setLeaseCountdown] = useState<number>(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const isLeaseHolder = !!localParticipantId && activeLine?.leaseTo === localParticipantId;
   const activeStepIndex = activeLine?.stepIndex ?? 0;
@@ -92,6 +95,8 @@ export default function SessionScreen() {
 
   const canDraw =
     !!localParticipantId && !isMutating && (!activeLine?.leaseTo || activeLine.leaseTo === localParticipantId);
+
+  const canSubmit = canDraw && isLeaseHolder && strokes.length > 0 && !isSubmitting;
 
   const disabledReason = useMemo(() => {
     if (isMutating) {
@@ -162,6 +167,65 @@ export default function SessionScreen() {
     await releaseControl();
   }, [releaseControl]);
 
+  const handleSubmitLine = useCallback(async () => {
+    if (!sessionId || !localParticipantId || !strokes.length) {
+      return;
+    }
+    const stepIndex = typeof activeLine?.stepIndex === 'number' ? activeLine.stepIndex : 0;
+    setIsSubmitting(true);
+    try {
+      const response = await submitLine(sessionId, stepIndex, {
+        strokes,
+        leaseTo: localParticipantId,
+        submitter: {
+          participantId: localParticipantId,
+          name: displayName,
+          role: 'student',
+        },
+      });
+      if (!response.ok) {
+        setFeedback({
+          type: 'error',
+          message: response.error ?? 'Submission failed. Please try again.',
+        });
+        return;
+      }
+      const { attempt, nextActiveLine, advanced, solverError } = response.data;
+      setActiveLineState(nextActiveLine);
+
+      const solver = attempt?.solver;
+      if (advanced) {
+        const successMessage = solver?.expression
+          ? `Nice! “${solver.expression}” keeps things moving.`
+          : 'Correct step! Move on to the next line.';
+        setFeedback({ type: 'success', message: successMessage });
+      } else {
+        const failureMessage =
+          solverError ??
+          (solver?.expression
+            ? `I read this as “${solver.expression}”. Try connecting it to the next step.`
+            : 'This step needs a bit more detail. Give it another shot.');
+        setFeedback({ type: 'error', message: failureMessage });
+      }
+    } catch (error) {
+      console.warn('Submit line failed', error);
+      setFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Submission failed. Please try again.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [activeLine?.stepIndex, displayName, localParticipantId, sessionId, setActiveLineState, strokes]);
+
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = setTimeout(() => {
+      setFeedback(null);
+    }, 2600);
+    return () => clearTimeout(timer);
+  }, [feedback]);
+
   if (!connection) {
     return (
       <View style={styles.loading}>
@@ -213,6 +277,28 @@ export default function SessionScreen() {
         canDraw={canDraw}
         disabledReason={disabledReason}
       />
+      <View style={styles.submitContainer} pointerEvents="box-none">
+        <TouchableOpacity
+          style={[styles.submitButton, (!canSubmit || isMutating) && styles.submitButtonDisabled]}
+          onPress={handleSubmitLine}
+          activeOpacity={0.88}
+          disabled={!canSubmit}
+        >
+          <ThemedText style={styles.submitButtonText}>{isSubmitting ? 'Submitting…' : 'Submit Step'}</ThemedText>
+        </TouchableOpacity>
+      </View>
+      {feedback ? (
+        <View style={styles.feedbackContainer} pointerEvents="none">
+          <View
+            style={[
+              styles.feedbackPill,
+              feedback.type === 'success' ? styles.feedbackPillSuccess : styles.feedbackPillError,
+            ]}
+          >
+            <ThemedText style={styles.feedbackText}>{feedback.message}</ThemedText>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -285,6 +371,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  submitContainer: {
+    position: 'absolute',
+    bottom: 28,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    pointerEvents: 'box-none',
+  },
+  submitButton: {
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 999,
+    backgroundColor: '#2563EB',
+    shadowColor: '#1e3a8a',
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  submitButtonDisabled: {
+    opacity: 0.5,
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   loading: {
     flex: 1,
     alignItems: 'center',
@@ -294,6 +408,39 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: '#64748B',
+  },
+  feedbackContainer: {
+    position: 'absolute',
+    top: 120,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedbackPill: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+  },
+  feedbackPillSuccess: {
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    backgroundColor: 'rgba(187, 247, 208, 0.92)',
+  },
+  feedbackPillError: {
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    backgroundColor: 'rgba(254, 226, 226, 0.92)',
+  },
+  feedbackText: {
+    color: '#1f2937',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 

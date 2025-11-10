@@ -11,6 +11,44 @@ interface LeaseResponseErr {
   error: string;
 }
 
+export interface SessionLineSubmitter {
+  participantId?: string | null;
+  name?: string | null;
+  role?: string | null;
+}
+
+export interface SessionLineSolverOutcome {
+  expression?: string | null;
+  correctness?: 'correct' | 'incorrect' | 'unknown';
+  usefulness?: 'useful' | 'not_useful' | 'unknown';
+  confidence?: number | null;
+  provider?: string | null;
+  raw?: unknown;
+  heavy?: unknown;
+}
+
+export interface SessionLineAttempt {
+  attemptId: string;
+  stepIndex: number;
+  strokes: unknown;
+  submitter?: SessionLineSubmitter | null;
+  createdAt: string;
+  snapshot?: string | null;
+  solver?: SessionLineSolverOutcome | null;
+}
+
+interface SubmitLineResponseOk {
+  ok: true;
+  data: {
+    attempt: SessionLineAttempt;
+    nextActiveLine: ActiveLineLease | null;
+    advanced: boolean;
+    solverError: string | null;
+  };
+}
+
+type SubmitLineResponseErr = LeaseResponseErr;
+
 const jsonHeaders = {
   'Content-Type': 'application/json',
 };
@@ -42,5 +80,22 @@ export async function releaseLease(sessionId: string) {
     headers: jsonHeaders,
   });
   return (await response.json()) as LeaseResponseOk | LeaseResponseErr;
+}
+
+export interface SubmitLineBody {
+  strokes: unknown;
+  leaseTo?: string | null;
+  submitter?: SessionLineSubmitter;
+  snapshot?: string | null;
+  planId?: string | null;
+}
+
+export async function submitLine(sessionId: string, stepIndex: number, body: SubmitLineBody) {
+  const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/lines/${stepIndex}/submit`, {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify(body),
+  });
+  return (await response.json()) as SubmitLineResponseOk | SubmitLineResponseErr;
 }
 

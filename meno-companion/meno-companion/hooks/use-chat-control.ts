@@ -60,6 +60,7 @@ interface UseChatControlResult {
   isHydrating: boolean;
   takeControl: (stepIndex: number) => Promise<boolean>;
   releaseControl: () => Promise<boolean>;
+  setActiveLineState: (lease: ActiveLineLease | null) => void;
 }
 
 export const useChatControl = ({
@@ -73,6 +74,24 @@ export const useChatControl = ({
   const [isMutating, setIsMutating] = useState(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+
+  const setActiveLineState = useCallback((lease: ActiveLineLease | null) => {
+    if (!lease) {
+      setActiveLine(null);
+      return;
+    }
+    const leaseExpiresAt =
+      typeof lease.leaseExpiresAt === 'number' && Number.isFinite(lease.leaseExpiresAt)
+        ? lease.leaseExpiresAt
+        : Date.now() + 30_000;
+    setActiveLine({
+      leaseId: lease.leaseId,
+      stepIndex: typeof lease.stepIndex === 'number' ? lease.stepIndex : null,
+      leaseTo: lease.leaseTo ?? null,
+      leaseIssuedAt: lease.leaseIssuedAt ?? new Date().toISOString(),
+      leaseExpiresAt,
+    });
+  }, []);
 
   useEffect(() => {
     if (!sessionId) {
@@ -97,18 +116,7 @@ export const useChatControl = ({
 
         if (cancelled) return;
 
-        if (payload.data) {
-          const lease = payload.data;
-          setActiveLine({
-            leaseId: lease.leaseId,
-            stepIndex: lease.stepIndex,
-            leaseTo: lease.leaseTo,
-            leaseIssuedAt: lease.leaseIssuedAt,
-            leaseExpiresAt: lease.leaseExpiresAt,
-          });
-        } else {
-          setActiveLine(null);
-        }
+        setActiveLineState(payload.data);
       } catch (error) {
         if (controller.signal.aborted || cancelled) return;
         console.warn('[Companion Chat] Failed to hydrate realtime snapshot', error);
@@ -126,7 +134,7 @@ export const useChatControl = ({
       controller.abort();
       setIsHydrating(false);
     };
-  }, [sessionId]);
+  }, [sessionId, setActiveLineState]);
 
   useEffect(() => {
     if (!sessionId || !participantId) {
@@ -163,9 +171,9 @@ export const useChatControl = ({
             if (payload.type === 'control.lease.state') {
               const lease = payload.data;
               if (!lease || lease.stepIndex === null) {
-                setActiveLine(null);
+                setActiveLineState(null);
               } else {
-                setActiveLine({
+                setActiveLineState({
                   leaseId: lease.leaseId ?? '',
                   stepIndex: lease.stepIndex,
                   leaseTo: lease.leaseTo,
@@ -216,7 +224,7 @@ export const useChatControl = ({
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [sessionId, participantId, name, role]);
+  }, [sessionId, participantId, name, role, setActiveLineState]);
 
   const handleTakeControl = useCallback(
     async (stepIndex: number) => {
@@ -231,7 +239,7 @@ export const useChatControl = ({
           console.warn('[Companion Chat] Failed to take lease', payload.error);
           return false;
         }
-        setActiveLine(payload.data);
+        setActiveLineState(payload.data);
         return true;
       } catch (error) {
         console.warn('[Companion Chat] take control failed', error);
@@ -252,7 +260,7 @@ export const useChatControl = ({
         console.warn('[Companion Chat] Failed to release lease', payload.error);
         return false;
       }
-      setActiveLine(payload.data);
+      setActiveLineState(payload.data);
       return true;
     } catch (error) {
       console.warn('[Companion Chat] release control failed', error);
@@ -260,7 +268,7 @@ export const useChatControl = ({
     } finally {
       setIsMutating(false);
     }
-  }, [sessionId]);
+  }, [sessionId, setActiveLineState]);
 
   return {
     activeLine,
@@ -268,6 +276,7 @@ export const useChatControl = ({
     isMutating,
     takeControl: handleTakeControl,
     releaseControl: handleReleaseControl,
+    setActiveLineState,
   };
 };
 
