@@ -49,6 +49,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
   const sessionParticipants = useSessionStore((state) => state.participants);
   const activeLine = useSessionStore((state) => state.activeLine);
   const setActiveLineState = useSessionStore((state) => state.setActiveLine);
+  const hspPlanId = useSessionStore((state) => state.hspPlanId);
   const setRecentAttempt = useSessionStore((state) => state.setRecentAttempt);
   const sessionId = useSessionStore((state) => state.sessionId);
 
@@ -215,7 +216,44 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
       let snapshot: string | null = null;
       const bandCanvas = canvasRef.current?.captureActiveBand();
       if (bandCanvas) {
-        snapshot = bandCanvas.toDataURL("image/png");
+        try {
+          const MAX_WIDTH = 900;
+          const scale =
+            bandCanvas.width > MAX_WIDTH ? MAX_WIDTH / bandCanvas.width : 1;
+          const targetWidth = Math.max(
+            1,
+            Math.floor(bandCanvas.width * scale),
+          );
+          const targetHeight = Math.max(
+            1,
+            Math.floor(bandCanvas.height * scale),
+          );
+          const scaledCanvas = document.createElement("canvas");
+          scaledCanvas.width = targetWidth;
+          scaledCanvas.height = targetHeight;
+          const ctx = scaledCanvas.getContext("2d");
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "medium";
+            ctx.drawImage(
+              bandCanvas,
+              0,
+              0,
+              bandCanvas.width,
+              bandCanvas.height,
+              0,
+              0,
+              targetWidth,
+              targetHeight,
+            );
+            snapshot = scaledCanvas.toDataURL("image/jpeg", 0.68);
+          } else {
+            snapshot = bandCanvas.toDataURL("image/jpeg", 0.68);
+          }
+        } catch (error) {
+          console.warn("Failed to compress snapshot", error);
+          snapshot = bandCanvas.toDataURL("image/png");
+        }
       }
 
       const response = await submitLine(sessionId, stepIndex, {
@@ -227,6 +265,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
           role: "teacher",
         },
         snapshot,
+        planId: hspPlanId ?? undefined,
       });
       if (!response.ok) {
         showToast({
@@ -238,14 +277,14 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
       }
       const { nextActiveLine, solverError, attempt, advanced } = response.data;
       setRecentAttempt(attempt);
-      if (nextActiveLine) {
-        setActiveLineState(nextActiveLine);
-      } else {
-        setActiveLineState(null);
-      }
+      setActiveLineState(nextActiveLine ?? null);
+
+      const solver = attempt.solver;
 
       if (advanced) {
-        const successMessage = "Correct step! Move on to the next line.";
+        const successMessage = solver?.expression
+          ? `Nice! "${solver.expression}" keeps the solution moving.`
+          : "Correct step! Move on to the next line.";
         setFeedback({ type: "success", message: successMessage });
         showToast({
           variant: "success",
@@ -255,7 +294,9 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
       } else {
         const failureMessage =
           solverError ??
-          "This step needs a bit more work. Try explaining how it moves toward the answer.";
+          (solver?.expression
+            ? `I read this line as "${solver.expression}". Refine it to connect to the next step.`
+            : "This step needs a bit more work. Try explaining how it moves toward the answer.");
         setFeedback({ type: "error", message: failureMessage });
         showToast({
           variant: "warning",
@@ -282,6 +323,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(function
     setRecentAttempt,
     sessionId,
     strokes,
+    hspPlanId,
   ]);
 
   useEffect(() => {

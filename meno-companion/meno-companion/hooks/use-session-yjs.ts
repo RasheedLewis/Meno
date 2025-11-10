@@ -92,7 +92,6 @@ export function useSessionYjs(
         strokesArray.toArray();
 
         docUpdateHandler = (update: Uint8Array, origin: unknown) => {
-          console.log('[Companion Yjs] doc update', { length: update.length, origin });
           schedulePersist();
         };
 
@@ -103,11 +102,9 @@ export function useSessionYjs(
         });
 
         provider.on('status', (event: { status: 'connected' | 'disconnected' }) => {
-          console.log('[Companion Yjs] status', event.status);
         });
 
         provider.on('sync', (isSynced: boolean) => {
-          console.log('[Companion Yjs] sync', isSynced);
         });
 
         provider.awareness.setLocalState({

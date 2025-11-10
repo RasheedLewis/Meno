@@ -6,11 +6,15 @@ import {
   appendSessionLineAttempt,
   getSessionById,
   setActiveLineLease,
+  type SessionLineSolverOutcome,
 } from "@/lib/session/store";
 import {
   mathpixEnabled,
   recognizeHandwriting,
 } from "@/lib/solver/mathpix";
+import { fetchHspPlan } from "@/lib/hsp/store";
+import { extractQuickCheckConfig } from "@/lib/validate/client";
+import { runHeavyCheck } from "@/lib/validate/server";
 
 interface Params {
   sessionId: string;
@@ -26,6 +30,7 @@ interface SubmitBody {
     role?: string;
   };
   snapshot?: string | null;
+  planId?: string | null;
 }
 
 export async function POST(
@@ -74,38 +79,95 @@ export async function POST(
 
     const snapshotProvided =
       typeof body.snapshot === "string" && body.snapshot.length > 0;
-    const shouldAttemptSolver = snapshotProvided && mathpixEnabled;
+    const shouldAttemptOcr = snapshotProvided && mathpixEnabled;
 
     let solverError: string | null = null;
     let shouldAdvance = !snapshotProvided || !mathpixEnabled;
-    let solverOutcome = null;
+    let solverOutcome: SessionLineSolverOutcome | null = null;
 
-    if (shouldAttemptSolver) {
+    let referenceExpression: string | undefined;
+    let expectedUnits: string[] | undefined;
+    let canonicalQuestion: string | undefined;
+
+    if (body.planId) {
+      try {
+        const plan = await fetchHspPlan(body.planId);
+        const step = plan?.steps?.[parsedStepIndex] ?? null;
+        canonicalQuestion = plan?.meta?.canonicalText ?? plan?.goal;
+        if (step) {
+          const config = extractQuickCheckConfig(step);
+          referenceExpression = config?.referenceExpression;
+          expectedUnits = config?.expectedUnits;
+        }
+      } catch (error) {
+        console.warn("Solver: failed to fetch HSP plan", error);
+      }
+    }
+
+    if (shouldAttemptOcr) {
       const solverResult = await recognizeHandwriting(body.snapshot!);
       if (solverResult.ok) {
-        shouldAdvance = true;
+        const expression = solverResult.expression;
+        let correctness: SessionLineSolverOutcome["correctness"] = "unknown";
+        let usefulness: SessionLineSolverOutcome["usefulness"] = "unknown";
+
+        if (expression && referenceExpression) {
+          try {
+            const heavy = await runHeavyCheck({
+              studentExpression: expression,
+              referenceExpression,
+              expectedUnits,
+            });
+            correctness = heavy.equivalent ? "correct" : "incorrect";
+            usefulness = heavy.equivalent ? "useful" : "neutral";
+            shouldAdvance = heavy.equivalent;
+          } catch (error) {
+            solverError =
+              error instanceof Error ? error.message : "Solver comparison failed";
+            correctness = "unknown";
+            usefulness = "neutral";
+            shouldAdvance = false;
+          }
+        } else if (expression) {
+          correctness = "unknown";
+          usefulness = "neutral";
+          shouldAdvance = false;
+        } else {
+          correctness = "incorrect";
+          usefulness = "neutral";
+          shouldAdvance = false;
+        }
+
         solverOutcome = {
-          expression: solverResult.expression,
-          correctness: "correct" as const,
-          usefulness: "useful" as const,
+          expression,
+          correctness,
+          usefulness,
           confidence: solverResult.confidence,
           provider: solverResult.provider,
-          raw: solverResult.raw,
+          raw: {
+            ...solverResult.raw,
+            referenceExpression,
+            canonicalQuestion,
+          },
         };
       } else {
-        shouldAdvance = false;
         solverError = solverResult.error;
         solverOutcome = {
           expression: null,
-          correctness: "incorrect" as const,
-          usefulness: "neutral" as const,
+          correctness: "incorrect",
+          usefulness: "neutral",
           confidence: null,
           provider: solverResult.provider,
-          raw: solverResult.raw ?? null,
+          raw: {
+            ...(solverResult.raw ?? {}),
+            canonicalQuestion,
+          },
         };
+        shouldAdvance = false;
       }
     } else if (snapshotProvided && !mathpixEnabled) {
       solverError = "Mathpix credentials not configured";
+      shouldAdvance = false;
     }
 
     const attempt = await appendSessionLineAttempt(sessionId, {
@@ -132,14 +194,20 @@ export async function POST(
           leaseIssuedAt: new Date().toISOString(),
           leaseExpiresAt: Date.now() + 30_000,
         };
-    } else if (!nextActiveLine) {
-      nextActiveLine = {
-        leaseId: randomUUID(),
+    } else {
+      const updated = await setActiveLineLease(sessionId, {
         stepIndex: parsedStepIndex,
         leaseTo: body.leaseTo ?? null,
-        leaseIssuedAt: new Date().toISOString(),
-        leaseExpiresAt: Date.now() + 30_000,
-      };
+      });
+      nextActiveLine =
+        updated?.activeLine ??
+        nextActiveLine ?? {
+          leaseId: randomUUID(),
+          stepIndex: parsedStepIndex,
+          leaseTo: body.leaseTo ?? null,
+          leaseIssuedAt: new Date().toISOString(),
+          leaseExpiresAt: Date.now() + 30_000,
+        };
     }
 
     return NextResponse.json({

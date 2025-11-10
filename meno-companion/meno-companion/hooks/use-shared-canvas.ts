@@ -133,18 +133,15 @@ export function useSharedCanvas(connection: YjsSessionConnection | null): UseSha
       }
 
       strokeEntriesRef.current = entries;
-      console.log('[Companion Yjs] strokes updated', result.length);
       setStrokes(result);
     };
 
     updateStrokes();
 
     const arrayObserver = () => {
-      console.log('[Companion Yjs] strokes array changed', strokesArray.length);
       updateStrokes();
     };
     const docObserver = () => {
-      console.log('[Companion Yjs] doc broadcast received');
       updateStrokes();
     };
 

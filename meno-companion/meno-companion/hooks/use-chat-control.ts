@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { API_BASE_URL, REALTIME_WS_URL } from '@/constants/config';
+import { REALTIME_WS_URL } from '@/constants/config';
+import { fetchLease, takeLease, releaseLease } from '@/lib/api/lease';
 
 export interface ActiveLineLease {
   leaseId: string;
@@ -53,19 +54,30 @@ const buildWebsocketUrl = (sessionId: string, participantId: string, name: strin
   return url.toString();
 };
 
+interface UseChatControlResult {
+  activeLine: ActiveLineLease | null;
+  isMutating: boolean;
+  isHydrating: boolean;
+  takeControl: (stepIndex: number) => Promise<boolean>;
+  releaseControl: () => Promise<boolean>;
+}
+
 export const useChatControl = ({
   sessionId,
   participantId,
   name,
   role,
-}: UseChatControlOptions): ActiveLineLease | null => {
+}: UseChatControlOptions): UseChatControlResult => {
   const [activeLine, setActiveLine] = useState<ActiveLineLease | null>(null);
+  const [isHydrating, setIsHydrating] = useState(false);
+  const [isMutating, setIsMutating] = useState(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (!sessionId) {
       setActiveLine(null);
+      setIsHydrating(false);
       return;
     }
 
@@ -74,22 +86,19 @@ export const useChatControl = ({
 
     const hydrate = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/realtime/session/${sessionId}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          signal: controller.signal,
-        });
-        const payload = await response.json();
-        if (!response.ok || !payload?.ok || !payload.data) {
-          throw new Error(payload?.error ?? 'Realtime hydrate failed');
+        setIsHydrating(true);
+        const payload = await fetchLease(sessionId);
+        if (!payload?.ok || cancelled) {
+          if (payload && !payload.ok) {
+            console.warn('[Companion Chat] Lease hydrate failed', payload.error);
+          }
+          return;
         }
 
         if (cancelled) return;
 
-        if (payload.data.activeLine) {
-          const lease = payload.data.activeLine as ActiveLineLease;
+        if (payload.data) {
+          const lease = payload.data;
           setActiveLine({
             leaseId: lease.leaseId,
             stepIndex: lease.stepIndex,
@@ -103,6 +112,10 @@ export const useChatControl = ({
       } catch (error) {
         if (controller.signal.aborted || cancelled) return;
         console.warn('[Companion Chat] Failed to hydrate realtime snapshot', error);
+      } finally {
+        if (!cancelled) {
+          setIsHydrating(false);
+        }
       }
     };
 
@@ -111,6 +124,7 @@ export const useChatControl = ({
     return () => {
       cancelled = true;
       controller.abort();
+      setIsHydrating(false);
     };
   }, [sessionId]);
 
@@ -204,7 +218,57 @@ export const useChatControl = ({
     };
   }, [sessionId, participantId, name, role]);
 
-  return activeLine;
+  const handleTakeControl = useCallback(
+    async (stepIndex: number) => {
+      if (!sessionId || !participantId) return false;
+      setIsMutating(true);
+      try {
+        const payload = await takeLease(sessionId, {
+          stepIndex,
+          leaseTo: participantId,
+        });
+        if (!payload.ok) {
+          console.warn('[Companion Chat] Failed to take lease', payload.error);
+          return false;
+        }
+        setActiveLine(payload.data);
+        return true;
+      } catch (error) {
+        console.warn('[Companion Chat] take control failed', error);
+        return false;
+      } finally {
+        setIsMutating(false);
+      }
+    },
+    [participantId, sessionId],
+  );
+
+  const handleReleaseControl = useCallback(async () => {
+    if (!sessionId) return false;
+    setIsMutating(true);
+    try {
+      const payload = await releaseLease(sessionId);
+      if (!payload.ok) {
+        console.warn('[Companion Chat] Failed to release lease', payload.error);
+        return false;
+      }
+      setActiveLine(payload.data);
+      return true;
+    } catch (error) {
+      console.warn('[Companion Chat] release control failed', error);
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  }, [sessionId]);
+
+  return {
+    activeLine,
+    isHydrating,
+    isMutating,
+    takeControl: handleTakeControl,
+    releaseControl: handleReleaseControl,
+  };
 };
 
 

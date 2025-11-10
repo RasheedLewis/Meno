@@ -48,6 +48,7 @@ export interface SubmitLineBody {
   leaseTo?: string | null;
   submitter?: SessionLineSubmitter;
   snapshot?: string | null;
+  planId?: string | null;
 }
 
 export interface SubmitLineResponse {

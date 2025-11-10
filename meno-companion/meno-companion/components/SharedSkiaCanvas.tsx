@@ -130,16 +130,27 @@ export default function SharedSkiaCanvas({
     [appendToStroke, beginStroke, cancelStroke, canDraw, endStroke, onPointerUpdate, size.height, size.width],
   );
 
+  const canvasMetrics = useMemo(() => {
+    const width = size.width;
+    const height = size.height;
+    const topInset = Math.min(Math.max(height * 0.12, 96), height * 0.3);
+    const bottomInset = Math.min(Math.max(height * 0.08, 72), height * 0.25);
+    const availableHeight = Math.max(height - topInset - bottomInset, height * 0.4);
+    const totalLines = Math.max(6, Math.round(availableHeight / 120));
+    const lineGap = availableHeight / totalLines;
+    return { width, height, topInset, bottomInset, availableHeight, totalLines, lineGap };
+  }, [size.height, size.width]);
+
   const paths = useMemo(() => {
-    const baseDimension = Math.max(Math.min(size.width, size.height), 1);
+    const baseDimension = Math.max(Math.min(canvasMetrics.width, canvasMetrics.height), 1);
     return strokes.map((stroke) => {
       const path = Skia.Path.Make();
       const points = stroke.points;
       if (points.length > 0) {
-        path.moveTo(points[0].x * size.width, points[0].y * size.height);
+        path.moveTo(points[0].x * canvasMetrics.width, points[0].y * canvasMetrics.height);
         for (let i = 1; i < points.length; i += 1) {
           const point = points[i];
-          path.lineTo(point.x * size.width, point.y * size.height);
+          path.lineTo(point.x * canvasMetrics.width, point.y * canvasMetrics.height);
         }
       }
       const strokeWidth = Math.max(stroke.size * baseDimension, 2.5);
@@ -155,7 +166,7 @@ export default function SharedSkiaCanvas({
         />
       );
     });
-  }, [size.height, size.width, strokes]);
+  }, [canvasMetrics, strokes]);
 
   const remotePointerElements = remotePointers
     .filter((pointer) => pointer.point)
@@ -214,26 +225,48 @@ export default function SharedSkiaCanvas({
       {...panResponder.panHandlers}
     >
       <Canvas style={styles.canvas} pointerEvents="none">
-        <Path path={Skia.Path.MakeFromSVGString(`M0 0 H${size.width} V${size.height} H0Z`) ?? Skia.Path.Make()} color={CANVAS_BACKGROUND} style="fill" />
-        {Array.from({ length: Math.max(6, Math.round(size.height / 120)) }).map((_, index, array) => {
-          const lineGap = size.height / Math.max(1, array.length);
-          const y = (index + 1) * lineGap;
-          const highlight = activeStepIndex !== null && activeStepIndex >= 0 && index === Math.min(activeStepIndex, array.length - 1);
+        <Path path={Skia.Path.MakeFromSVGString(`M0 0 H${canvasMetrics.width} V${canvasMetrics.height} H0Z`) ?? Skia.Path.Make()} color={CANVAS_BACKGROUND} style="fill" />
+        {Array.from({ length: canvasMetrics.totalLines }).map((_, index) => {
+          const y = canvasMetrics.topInset + (index + 1) * canvasMetrics.lineGap;
+          const highlight = typeof activeStepIndex === 'number' && activeStepIndex >= 0 && index === Math.min(activeStepIndex, canvasMetrics.totalLines - 1);
           const guidePath = Skia.Path.Make();
           guidePath.moveTo(0, y);
-          guidePath.lineTo(size.width, y);
+          guidePath.lineTo(canvasMetrics.width, y);
+          if (highlight) {
+            const bandTop = canvasMetrics.topInset + index * canvasMetrics.lineGap;
+            const bandBottom = canvasMetrics.topInset + (index + 1) * canvasMetrics.lineGap;
+            const paddedTop = Math.max(bandTop - 12, 0);
+            const paddedBottom = Math.min(bandBottom + 12, canvasMetrics.height);
+            const highlightRect = Skia.Path.Make();
+            highlightRect.addRect({ x: 0, y: paddedTop, width: canvasMetrics.width, height: paddedBottom - paddedTop });
+            return (
+              <React.Fragment key={`highlight-${index}`}>
+                <Path
+                  path={highlightRect}
+                  color="rgba(14, 165, 233, 0.12)"
+                  style="fill"
+                />
+                <Path
+                  path={guidePath}
+                  color={pointerColor}
+                  strokeWidth={2}
+                  style="stroke"
+                  strokeCap="round"
+                  strokeJoin="round"
+                />
+              </React.Fragment>
+            );
+          }
           return (
             <Path
               key={`guide-${index}`}
               path={guidePath}
-              color={highlight ? pointerColor : "rgba(54, 69, 79, 0.08)"}
-              strokeWidth={highlight ? 2 : 1}
+              color="rgba(54, 69, 79, 0.08)"
+              strokeWidth={1}
               style="stroke"
               strokeCap="round"
               strokeJoin="round"
-              start={0}
-              end={1}
-              dash={highlight ? undefined : [4, 8]}
+              dash={[4, 8]}
             />
           );
         })}
