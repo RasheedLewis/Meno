@@ -1,6 +1,9 @@
 Meno — Socratic Math Tutor
 ==========================
 
+[Video Demo Part 1](https://www.loom.com/share/f036ffb04a80451cb184b735b8dbd20f)
+[Video Demo Part 2](https://www.loom.com/share/ebb507e489b9471b873153615958d572)
+
 Meno is an AI-powered math tutor inspired by Plato’s *Meno*. It guides 1–4 learners through problems using Socratic dialogue, multimodal collaboration, and a hidden solution plan that keeps the conversation purposeful.
 
 ## Highlights
